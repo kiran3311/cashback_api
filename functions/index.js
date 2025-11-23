@@ -40,8 +40,8 @@ app.use(cors());
 const userRoutes = require("./routes/userRoute");
 app.use("/", userRoutes);
 
-
-
+const shopkeeperRoute = require("./routes/shopkeeperRoute")
+app.use("/", shopkeeperRoute);
 
 
 

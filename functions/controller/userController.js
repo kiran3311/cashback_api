@@ -31,7 +31,11 @@ exports.register = async (req, res) => {
         const { name, email, mobile, password, profile } = req.body;
 
         if (!name || !email || !mobile || !password ||!profile) {
-            return res.status(400).json({ message: "All fields required" });
+            return res.status(200).json({ 
+                
+                success: false,
+                errorCode :2,
+                message: "All fields required" });
         }
 
         // 1️⃣ Check if email exists
@@ -40,7 +44,10 @@ exports.register = async (req, res) => {
             .get();
 
         if (!emailSnap.empty) {
-            return res.status(400).json({ message: "Email already registered" });
+            return res.status(200).json({ 
+                success: false,
+                errorCode :1,
+                message: "Email already registered" });
         }
 
         // 2️⃣ Check if mobile exists
@@ -49,9 +56,14 @@ exports.register = async (req, res) => {
             .get();
 
         if (!mobileSnap.empty) {
-            return res.status(400).json({ message: "Mobile number already registered" });
+            return res.status(200).json({ 
+                success: false,
+                errorCode :1,
+                message: "Mobile number already registered" });
         }
 
+
+       
         // 3️⃣ Encrypt password
         const encryptedPassword = encrypt(password);
 
@@ -66,6 +78,8 @@ exports.register = async (req, res) => {
         });
 
         res.status(200).json({
+            success: true,
+                errorCode :1,
             message: "User registered successfully",
             userId: docRef.id
         });
@@ -81,9 +95,9 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
     try {
-        const { emailOrMobile, password } = req.body;
+        const { emailOrMobile } = req.body;
 
-        if (!emailOrMobile || !password) {
+        if (!emailOrMobile ) {
             return res.status(400).json({ message: "Email/Mobile and password required" });
         }
 
@@ -107,15 +121,19 @@ exports.login = async (req, res) => {
         const user = userSnap.docs[0].data();
 
         // 4️⃣ Decrypt and match password
-        const decryptedPassword = decrypt(user.password);
+        // const decryptedPassword = decrypt(user.password);
 
-        if (decryptedPassword !== password) {
-            return res.status(400).json({ message: "Invalid password" });
-        }
+        // if (decryptedPassword !== password) {
+        //     return res.status(400).json({ message: "Invalid password" });
+        // }
+        const userDoc = userSnap.docs[0];
+        const userData = userDoc.data();
+        const userId = userDoc.id;
 
         res.status(200).json({
             message: "Login successful",
             user: {
+                userId:userId,
                 name: user.name,
                 email: user.email,
                 mobile: user.mobile,
