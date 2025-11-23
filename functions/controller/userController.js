@@ -1,5 +1,5 @@
 const db = require("../config/firebase");
-const { encrypt , decrypt } = require("../encryption/crypto");
+const { encrypt, decrypt } = require("../encryption/crypto");
 
 
 exports.createUser = async (req, res) => {
@@ -30,12 +30,13 @@ exports.register = async (req, res) => {
     try {
         const { name, email, mobile, password, profile } = req.body;
 
-        if (!name || !email || !mobile || !password ||!profile) {
-            return res.status(200).json({ 
-                
+        if (!name || !email || !mobile || !profile) {
+            return res.status(200).json({
+
                 success: false,
-                errorCode :2,
-                message: "All fields required" });
+                errorCode: 2,
+                message: "All fields required"
+            });
         }
 
         // 1️⃣ Check if email exists
@@ -44,10 +45,11 @@ exports.register = async (req, res) => {
             .get();
 
         if (!emailSnap.empty) {
-            return res.status(200).json({ 
+            return res.status(200).json({
                 success: false,
-                errorCode :1,
-                message: "Email already registered" });
+                errorCode: 1,
+                message: "Email already registered"
+            });
         }
 
         // 2️⃣ Check if mobile exists
@@ -56,30 +58,31 @@ exports.register = async (req, res) => {
             .get();
 
         if (!mobileSnap.empty) {
-            return res.status(200).json({ 
+            return res.status(200).json({
                 success: false,
-                errorCode :1,
-                message: "Mobile number already registered" });
+                errorCode: 1,
+                message: "Mobile number already registered"
+            });
         }
 
 
-       
+
         // 3️⃣ Encrypt password
-        const encryptedPassword = encrypt(password);
+        //const encryptedPassword = encrypt(password);
 
         // 4️⃣ Store user
         const docRef = await db.collection("users").add({
             name,
             email,
             mobile,
-            password: encryptedPassword,
+            // password: encryptedPassword,
             profile,
             createdAt: new Date()
         });
 
         res.status(200).json({
             success: true,
-                errorCode :1,
+            errorCode: 1,
             message: "User registered successfully",
             userId: docRef.id
         });
@@ -97,7 +100,7 @@ exports.login = async (req, res) => {
     try {
         const { emailOrMobile } = req.body;
 
-        if (!emailOrMobile ) {
+        if (!emailOrMobile) {
             return res.status(400).json({ message: "Email/Mobile and password required" });
         }
 
@@ -133,7 +136,7 @@ exports.login = async (req, res) => {
         res.status(200).json({
             message: "Login successful",
             user: {
-                userId:userId,
+                userId: userId,
                 name: user.name,
                 email: user.email,
                 mobile: user.mobile,
