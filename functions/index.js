@@ -43,6 +43,8 @@ app.use("/", userRoutes);
 const shopkeeperRoute = require("./routes/shopkeeperRoute")
 app.use("/", shopkeeperRoute);
 
+const customerRoute = require("./routes/customerRoute")
+app.use("/", customerRoute)
 
 
 const PORT = 5001;

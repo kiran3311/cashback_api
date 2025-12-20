@@ -82,7 +82,7 @@ exports.register = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            errorCode: 1,
+            errorCode: 0,
             message: "User registered successfully",
             userId: docRef.id
         });
@@ -101,7 +101,10 @@ exports.login = async (req, res) => {
         const { emailOrMobile } = req.body;
 
         if (!emailOrMobile) {
-            return res.status(400).json({ message: "Email/Mobile and password required" });
+            return res.status(200).json({
+                success: false,
+                errorCode:1,
+                message: "Email/Mobile and password required" });
         }
 
         // 1️⃣ Check by email
@@ -118,7 +121,10 @@ exports.login = async (req, res) => {
 
         // 3️⃣ User not found
         if (userSnap.empty) {
-            return res.status(404).json({ message: "User not found" });
+            return res.status(200).json({ 
+                success: false,
+                errorCode:1,
+                message: "User not found" });
         }
 
         const user = userSnap.docs[0].data();
