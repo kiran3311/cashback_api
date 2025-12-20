@@ -63,10 +63,12 @@ exports.getCustomerCashbackDetails = async (req, res) => {
 
             shopMap[shopkeeperId].totalCashback += cashback || 0;
             shopMap[shopkeeperId].cashbackHistory.push({
-                billAmount,
+                billAmount : billAmount || null,
                 cashback,
                 cashbackid,
-                date
+                date: date.toDate().toLocaleString("en-IN", {
+                    timeZone: "Asia/Kolkata"
+                }).toString()
             });
         }
 

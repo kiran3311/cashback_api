@@ -37,7 +37,7 @@ exports.getAllCustomerWithShopkeeperId = async (req, res) => {
 
 exports.addCustomer = async (req, res) => {
     try {
-        const { shopkeeperId, name, mobile, customerEmail, cashback,  billAmount, issuCashback } = req.body;
+        const { shopkeeperId, name, mobile, customerEmail, cashback, billAmount, issueCashback } = req.body;
 
         if (!shopkeeperId || !name || !mobile || !customerEmail) {
             return res.status(400).json({ message: "All fields required" });
@@ -82,7 +82,7 @@ exports.addCustomer = async (req, res) => {
                 name,
                 mobile,
                 cashback: Number(cashback) || 0,
-                billAmount: Number(billAmount) ||0,
+                billAmount: Number(billAmount) || 0,
                 addedAt: new Date()
             }, { merge: true });
 
@@ -90,9 +90,9 @@ exports.addCustomer = async (req, res) => {
         await db.collection("cashbacks").add({
             userId,
             shopkeeperId,
-            billAmount :Number(billAmount),
+            billAmount: Number(billAmount),
             cashback: Number(cashback),
-            issuCashback : issuCashback? issuCashback : false,
+            issueCashback: issueCashback ? issueCashback : true,
             date: new Date()
         });
 
@@ -126,19 +126,19 @@ exports.createShop = async (req, res) => {
             return res.status(400).json({ message: "Missing required fields" });
         }
 
-    //    const userRef = await db.collection("users")
-    //         .where("id", "==", shopkeeperId)
-    //         .get();
+        //    const userRef = await db.collection("users")
+        //         .where("id", "==", shopkeeperId)
+        //         .get();
 
-    //     if (userRef.empty) {
-    //         return res.status(404).json({ message: "No user found with this shopkeeperId" });
-    //     }
+        //     if (userRef.empty) {
+        //         return res.status(404).json({ message: "No user found with this shopkeeperId" });
+        //     }
 
-    //     const user = userRef.docs[0].data();
+        //     const user = userRef.docs[0].data();
 
-    //     if (user.profile !== "shopkeeper") {
-    //         return res.status(400).json({ message: "User is not registered as shopkeeper" });
-    //     }
+        //     if (user.profile !== "shopkeeper") {
+        //         return res.status(400).json({ message: "User is not registered as shopkeeper" });
+        //     }
 
         // Create shop object
         const shopData = {
@@ -249,6 +249,7 @@ exports.getCustomersByShopkeeper = async (req, res) => {
                 .where("userId", "==", userId)
                 .get();
 
+
             let totalCashback = 0;
             let cashbackHistory = [];
 
@@ -257,21 +258,32 @@ exports.getCustomersByShopkeeper = async (req, res) => {
                 totalCashback += data.cashback || 0;
 
                 cashbackHistory.push({
-                    billAmount  : data.billAmount,
+                    cashbackId: cb.id,
+                    billAmount: data.billAmount || null,
                     cashback: data.cashback,
-                    issuCashback: data.issuCashback,
+                    issueCashback: data?.issueCashback || false,
                     date: data.date
+                        ? data.date.toDate().toLocaleString("en-IN", {
+                            timeZone: "Asia/Kolkata"
+                        }).toString()
+                        : null
                 });
+
+                console.log("cashbackHistory", cashbackHistory)
             });
 
             // 3️⃣ Final formatted customer record
             customers.push({
-                userId :userId,
+                userId: userId,
                 name: userData.name || shopCustomer.name,
                 email: userData.email || null,
                 mobile: userData.mobile || shopCustomer.mobile,
                 totalcashback: totalCashback,
-                createdAt: shopCustomer.addedAt || userData.createdAt || null,
+                createdAt: shopCustomer.addedAt.toDate().toLocaleString("en-IN", {
+                    timeZone: "Asia/Kolkata"
+                }).toString() || userData.createdAt.toDate().toLocaleString("en-IN", {
+                    timeZone: "Asia/Kolkata"
+                }).toString() || null,
                 cashbackHistory // remove this line if you do NOT want history
             });
         }
@@ -291,4 +303,165 @@ exports.getCustomersByShopkeeper = async (req, res) => {
 };
 
 
+exports.updateCashbackToExistingCustomer = async (req, res) => {
+    try {
+        const {
+            mobile,
+            cashback,
+            billAmount,
+            issueCashback,
+            cashbackId
+        } = req.body;
 
+        if (!mobile || !cashbackId) {
+            return res.status(400).json({
+                message: "mobile and cashbackId are required"
+            });
+        }
+
+        // 1️⃣ Find user by mobile
+        const userRef = await db.collection("users")
+            .where("mobile", "==", mobile)
+            .get();
+
+        if (userRef.empty) {
+            return res.status(404).json({
+                message: "User not registered"
+            });
+        }
+
+        const userDoc = userRef.docs[0];
+        const userId = userDoc.id;
+        const userData = userDoc.data();
+
+        // 2️⃣ Ensure customer profile
+        if (userData.profile !== "customer") {
+            return res.status(400).json({
+                message: "This user is not a customer"
+            });
+        }
+
+        // 3️⃣ Fetch existing cashback by cashbackId
+        const cashbackRef = db.collection("cashbacks").doc(cashbackId);
+        const cashbackDoc = await cashbackRef.get();
+
+        if (!cashbackDoc.exists) {
+            return res.status(404).json({
+                message: "Cashback record not found"
+            });
+        }
+
+        const cashbackData = cashbackDoc.data();
+
+        // 4️⃣ Security check (VERY IMPORTANT)
+        // if (
+        //     cashbackData.userId !== userId ||
+        //     cashbackData.shopkeeperId !== shopkeeperId
+        // ) {
+        //     return res.status(403).json({
+        //         message: "Unauthorized cashback update"
+        //     });
+        // }
+
+        // 5️⃣ Update cashback only
+        await cashbackRef.update({
+            billAmount: billAmount !== undefined ? Number(billAmount) : cashbackData.billAmount,
+            cashback: cashback !== undefined ? Number(cashback) : cashbackData.cashback,
+            issueCashback: issueCashback !== undefined ? issueCashback : cashbackData.issueCashback,
+            updatedAt: new Date()
+        });
+
+        return res.status(200).json({
+            message: "Cashback updated successfully",
+            cashbackId
+        });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+
+};
+
+
+
+exports.addCashbackToExistingCustomer = async (req, res) => {
+    try {
+        const {
+            shopkeeperId,
+            customerMobile,
+            billAmount,
+            cashback,
+            issueCashback
+        } = req.body;
+
+        if (!shopkeeperId || !customerMobile || !billAmount || !cashback) {
+            return res.status(400).json({
+                message: "shopkeeperId, mobile, billAmount and cashback are required"
+            });
+        }
+
+        // 1️⃣ Find customer by mobile
+        const userSnap = await db.collection("users")
+            .where("mobile", "==", customerMobile)
+            .get();
+
+        if (userSnap.empty) {
+            return res.status(404).json({
+                message: "Customer not registered"
+            });
+        }
+
+        const userDoc = userSnap.docs[0];
+        const userId = userDoc.id;
+        const userData = userDoc.data();
+
+        if (userData.profile !== "customer") {
+            return res.status(400).json({
+                message: "User is not a customer"
+            });
+        }
+
+        // 2️⃣ Check customer already linked to shopkeeper
+        const customerRef = db
+            .collection("shopkeepers")
+            .doc(shopkeeperId)
+            .collection("customers")
+            .doc(userId);
+
+        const customerDoc = await customerRef.get();
+
+        if (!customerDoc.exists) {
+            return res.status(400).json({
+                message: "Customer not linked to this shopkeeper"
+            });
+        }
+
+        // 3️⃣ Add new cashback entry
+        const cashbackRef = await db.collection("cashbacks").add({
+            userId,
+            shopkeeperId,
+            billAmount: Number(billAmount),
+            cashback: Number(cashback),
+            issueCashback: issueCashback || true,
+            date: new Date(),
+            createdAt: new Date()
+        });
+
+        return res.status(200).json({
+            message: "Cashback added successfully",
+            cashbackId: cashbackRef.id,
+            userId
+        });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
