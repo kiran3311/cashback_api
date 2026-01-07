@@ -51,6 +51,7 @@ exports.addCustomer = async (req, res) => {
         if (userRef.empty) {
             await sendInviteEmail(customerEmail, name);
             return res.status(200).json({
+                errorCode: 4,
                 message: "User not registered — invitation sent to email."
             });
         }

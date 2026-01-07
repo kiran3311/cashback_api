@@ -140,6 +140,8 @@ exports.login = async (req, res) => {
         const userId = userDoc.id;
 
         res.status(200).json({
+            success: true,
+            errorCode:0,
             message: "Login successful",
             user: {
                 userId: userId,
