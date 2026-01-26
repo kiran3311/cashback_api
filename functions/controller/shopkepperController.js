@@ -2,6 +2,7 @@ const db = require("../config/firebase");
 const { encrypt, decrypt } = require("../encryption/crypto");
 const { sendInviteEmail } = require("../services/emailService");
 const { sendInviteEmail_2 } = require("../services/sendgridmailService");
+const axios = require("axios");
 
 exports.addCustomerToShopkeeper = async (req, res) => {
 
@@ -49,10 +50,10 @@ exports.addCustomer = async (req, res) => {
             .get();
 
         if (userRef.empty) {
-            await sendInviteEmail(customerEmail, name);
+            // await sendInviteEmail(customerEmail, name);
             return res.status(200).json({
                 errorCode: 4,
-                message: "User not registered — invitation sent to email."
+                message: "User not found"
             });
         }
 
@@ -94,6 +95,7 @@ exports.addCustomer = async (req, res) => {
             billAmount: Number(billAmount),
             cashback: Number(cashback),
             issueCashback: issueCashback ? issueCashback : true,
+            redeemcashback: false,
             date: new Date()
         });
 
@@ -263,6 +265,7 @@ exports.getCustomersByShopkeeper = async (req, res) => {
                     billAmount: data.billAmount || null,
                     cashback: data.cashback,
                     issueCashback: data?.issueCashback || false,
+                    redeemcashback: data?.redeemcashback || false,
                     date: data.date
                         ? data.date.toDate().toLocaleString("en-IN", {
                             timeZone: "Asia/Kolkata"
@@ -311,7 +314,8 @@ exports.updateCashbackToExistingCustomer = async (req, res) => {
             cashback,
             billAmount,
             issueCashback,
-            cashbackId
+            cashbackId,
+
         } = req.body;
 
         if (!mobile || !cashbackId) {
@@ -448,6 +452,7 @@ exports.addCashbackToExistingCustomer = async (req, res) => {
             billAmount: Number(billAmount),
             cashback: Number(cashback),
             issueCashback: issueCashback || true,
+            redeemcashback: false,
             date: new Date(),
             createdAt: new Date()
         });
@@ -456,6 +461,132 @@ exports.addCashbackToExistingCustomer = async (req, res) => {
             message: "Cashback added successfully",
             cashbackId: cashbackRef.id,
             userId
+        });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
+
+
+exports.redeemCashbackToExistingCustomer = async (req, res) => {
+    try {
+
+        const {
+            customerMobile,
+            billAmount,
+            cashbackId,
+
+        } = req.body;
+
+        if (!customerMobile || !cashbackId) {
+            return res.status(400).json({
+                message: "customerMobile and cashbackId are required"
+            });
+        }
+
+        // 1️⃣ Find user by customerMobile
+        const userRef = await db.collection("users")
+            .where("mobile", "==", customerMobile)
+            .get();
+
+        if (userRef.empty) {
+            return res.status(404).json({
+                message: "User not registered"
+            });
+        }
+
+        const userDoc = userRef.docs[0];
+        const userId = userDoc.id;
+        const userData = userDoc.data();
+
+        console.log("userData", userId)
+
+        // 2️⃣ Ensure customer profile
+        if (userData.profile !== "customer") {
+            return res.status(400).json({
+                message: "This user is not a customer"
+            });
+        }
+
+        // 3️⃣ Fetch existing cashback by cashbackId
+        const cashbackRef = db.collection("cashbacks").doc(cashbackId);
+        const cashbackDoc = await cashbackRef.get();
+
+        if (!cashbackDoc.exists) {
+            return res.status(404).json({
+                message: "Cashback record not found"
+            });
+        }
+
+        const cashbackData = cashbackDoc.data();
+
+
+
+        await axios.post("http://localhost:8000/send-notification", {
+            userId,
+            notificationId: cashbackId,
+            message: `Shopkeeper wants to redeem ₹${billAmount}. Approve?`
+        });
+
+
+        return res.status(200).json({
+            message: "Cashback redeem request notification send successfully",
+            cashbackId,
+            customerResponse: res.data
+        });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+
+};
+
+
+
+// POST /redeem-response
+exports.updateRedeemStatus = async (req, res) => {
+    try {
+        const { cashbackId, action } = req.body;
+
+        if (!cashbackId || !action) {
+            return res.status(400).json({
+                message: "cashbackId and action are required"
+            });
+        }
+
+        const cashbackRef = db.collection("cashbacks").doc(cashbackId);
+        const cashbackDoc = await cashbackRef.get();
+
+        if (!cashbackDoc.exists) {
+            return res.status(404).json({ message: "Cashback not found" });
+        }
+
+        const updateData =
+            action === "APPROVED"
+                ? {
+                    redeemcashback: true,
+                    redeemStatus: "APPROVED",
+                    redeemedAt: new Date()
+                }
+                : {
+                    redeemcashback: false,
+                    redeemStatus: "REJECTED"
+                };
+
+        await cashbackRef.update(updateData);
+        console.log("redeen updateData", updateData)
+        return res.status(200).json({
+            message: `Redeem ${action.toLowerCase()} successfully`
         });
 
     } catch (error) {

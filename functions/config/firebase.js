@@ -8,7 +8,7 @@ const admin = require("firebase-admin");
 
 const serviceConnection =
 
-  {
+{
   type: "service_account",
   project_id: "my-cashback-app",
   private_key_id: "098ff12477e6020555ee5b8341fec70c9bd9cdd2",
@@ -35,7 +35,7 @@ admin.initializeApp({
 //         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
 //         privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
 //     })
-    
+
 // });
 
 //new with firefunction
