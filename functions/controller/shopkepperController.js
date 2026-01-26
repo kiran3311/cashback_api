@@ -529,6 +529,8 @@ exports.redeemCashbackToExistingCustomer = async (req, res) => {
          const url = " http://72.62.195.21:8000";
        // const url = " http://localhost:8000"
 
+       console.log("before send notification :", userId, cashbackId, billAmount)
+
         await axios.post(`${url}/send-notification`, {
             userId,
             notificationId: cashbackId,
@@ -539,7 +541,7 @@ exports.redeemCashbackToExistingCustomer = async (req, res) => {
         return res.status(200).json({
             message: "Cashback redeem request notification send successfully",
             cashbackId,
-            customerResponse: res.data
+            customerResponse: res?.data
         });
 
     } catch (error) {
