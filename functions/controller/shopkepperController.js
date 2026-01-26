@@ -474,72 +474,101 @@ exports.addCashbackToExistingCustomer = async (req, res) => {
 
 
 
+// exports.redeemCashbackToExistingCustomer = async (req, res) => {
+//     try {
+
+//         const {
+//             customerMobile,
+//             billAmount,
+//             cashbackId,
+
+//         } = req.body;
+
+//         if (!customerMobile || !cashbackId) {
+//             return res.status(400).json({
+//                 message: "customerMobile and cashbackId are required"
+//             });
+//         }
+
+//         // 1️⃣ Find user by customerMobile
+//         const userRef = await db.collection("users")
+//             .where("mobile", "==", customerMobile)
+//             .get();
+
+//         if (userRef.empty) {
+//             return res.status(404).json({
+//                 message: "User not registered"
+//             });
+//         }
+
+//         const userDoc = userRef.docs[0];
+//         const userId = userDoc.id;
+//         const userData = userDoc.data();
+
+//         console.log("userData", userId)
+
+//         // 2️⃣ Ensure customer profile
+//         if (userData.profile !== "customer") {
+//             return res.status(400).json({
+//                 message: "This user is not a customer"
+//             });
+//         }
+
+//         // 3️⃣ Fetch existing cashback by cashbackId
+//         const cashbackRef = db.collection("cashbacks").doc(cashbackId);
+//         const cashbackDoc = await cashbackRef.get();
+
+//         if (!cashbackDoc.exists) {
+//             return res.status(404).json({
+//                 message: "Cashback record not found"
+//             });
+//         }
+
+//         const cashbackData = cashbackDoc.data();
+
+//          const url = " http://72.62.195.21:8000";
+//        // const url = " http://localhost:8000"
+
+//        console.log("before send notification :", userId, cashbackId, billAmount)
+
+//         await axios.post(`${url}/send-notification`, {
+//             userId,
+//             notificationId: cashbackId,
+//             message: `Shopkeeper wants to redeem ₹${billAmount}. Approve?`
+//         });
+
+
+//         return res.status(200).json({
+//             message: "Cashback redeem request notification send successfully",
+//             cashbackId,
+//             customerResponse: res?.data
+//         });
+
+//     } catch (error) {
+//         console.error(error);
+//         return res.status(500).json({
+//             message: "Server error",
+//             error: error.message
+//         });
+//     }
+
+// };
+
+
+
+// POST /redeem-response
+
+
+
+
 exports.redeemCashbackToExistingCustomer = async (req, res) => {
     try {
 
-        const {
-            customerMobile,
-            billAmount,
-            cashbackId,
-
-        } = req.body;
-
-        if (!customerMobile || !cashbackId) {
-            return res.status(400).json({
-                message: "customerMobile and cashbackId are required"
-            });
-        }
-
-        // 1️⃣ Find user by customerMobile
-        const userRef = await db.collection("users")
-            .where("mobile", "==", customerMobile)
-            .get();
-
-        if (userRef.empty) {
-            return res.status(404).json({
-                message: "User not registered"
-            });
-        }
-
-        const userDoc = userRef.docs[0];
-        const userId = userDoc.id;
-        const userData = userDoc.data();
-
-        console.log("userData", userId)
-
-        // 2️⃣ Ensure customer profile
-        if (userData.profile !== "customer") {
-            return res.status(400).json({
-                message: "This user is not a customer"
-            });
-        }
-
-        // 3️⃣ Fetch existing cashback by cashbackId
-        const cashbackRef = db.collection("cashbacks").doc(cashbackId);
-        const cashbackDoc = await cashbackRef.get();
-
-        if (!cashbackDoc.exists) {
-            return res.status(404).json({
-                message: "Cashback record not found"
-            });
-        }
-
-        const cashbackData = cashbackDoc.data();
-
-        // const url = " http://72.62.195.21:8000";
-        const url = " http://localhost:8000"
-
-        await axios.post(`${url}/send-notification`, {
-            userId,
-            notificationId: cashbackId,
-            message: `Shopkeeper wants to redeem ₹${billAmount}. Approve?`
-        });
-
-
-        return res.status(200).json({
+        console.log("redeemCashbackToExistingCustomer called", req.body)
+        res.status(200).json({
             message: "Cashback redeem request notification send successfully",
-            cashbackId,
-            customerResponse: res.data
+            cashbackId: null,
+            customerResponse: null
         });
 
     } catch (error) {
@@ -554,7 +583,15 @@ exports.redeemCashbackToExistingCustomer = async (req, res) => {
 
 
 
-// POST /redeem-response
+
+
+
+
+
+
+
+
+
 exports.updateRedeemStatus = async (req, res) => {
     try {
         const { cashbackId, action } = req.body;
