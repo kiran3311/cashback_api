@@ -526,9 +526,10 @@ exports.redeemCashbackToExistingCustomer = async (req, res) => {
 
         const cashbackData = cashbackDoc.data();
 
+        // const url = " http://72.62.195.21:8000";
+        const url = " http://localhost:8000"
 
-
-        await axios.post("http://localhost:8000/send-notification", {
+        await axios.post(`${url}/send-notification`, {
             userId,
             notificationId: cashbackId,
             message: `Shopkeeper wants to redeem ₹${billAmount}. Approve?`
