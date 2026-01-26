@@ -47,8 +47,9 @@ exports.getCustomerCashbackDetails = async (req, res) => {
 
         for (let doc of cashbackSnap.docs) {
             const data = doc.data();
-            const { shopkeeperId, cashback, billAmount, date, cashbackid } = data;
-
+            const cashbackid = doc.id;
+            const { shopkeeperId, cashback, billAmount, date , redeemcashback,issueCashback} = data;
+ console.log("cashback data----->>>", data);    
             if (!shopMap[shopkeeperId]) {
                 // fetch shopkeeper profile once
                 const shopDoc = await db.collection("users").doc(shopkeeperId).get();
@@ -63,12 +64,14 @@ exports.getCustomerCashbackDetails = async (req, res) => {
 
             shopMap[shopkeeperId].totalCashback += cashback || 0;
             shopMap[shopkeeperId].cashbackHistory.push({
-                billAmount : billAmount || null,
+                billAmount: billAmount || null,
                 cashback,
                 cashbackid,
                 date: date.toDate().toLocaleString("en-IN", {
                     timeZone: "Asia/Kolkata"
-                }).toString()
+                }).toString(),
+                redeemcashback: redeemcashback || false,
+                issueCashback: issueCashback || false
             });
         }
 
@@ -86,3 +89,38 @@ exports.getCustomerCashbackDetails = async (req, res) => {
         });
     }
 };
+
+
+
+exports.getCustomerByMobileNo = async (req, res) => {
+    try {
+        const { mobile } = req.body;
+        if (!mobile) {
+            return res.status(400).json({ message: "Mobile number is required" });
+        }
+        const snapshot = await db.collection("users")
+            .where("mobile", "==", mobile)
+            .where("profile", "==", "customer")
+            .limit(1)
+            .get();
+        //   const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        const customer = {
+            id: snapshot.docs[0]?.id,
+            ...snapshot.docs[0]?.data()
+        };
+
+        if (snapshot.empty) {
+            return res.status(404).json({ 
+                errorCode: 1,
+                message: "Customer not found" });
+        }
+        res.status(200).json({
+            message: "Customer fetched successfully",
+            customer
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send(err);
+    }
+}

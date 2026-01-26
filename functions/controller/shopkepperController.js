@@ -266,11 +266,15 @@ exports.getCustomersByShopkeeper = async (req, res) => {
                     cashback: data.cashback,
                     issueCashback: data?.issueCashback || false,
                     redeemcashback: data?.redeemcashback || false,
+                    redeemStatus: data?.redeemStatus || "PENDING",
                     date: data.date
                         ? data.date.toDate().toLocaleString("en-IN", {
                             timeZone: "Asia/Kolkata"
                         }).toString()
-                        : null
+                        : null,
+                    redeemedAt: data?.redeemedAt ? data.redeemedAt.toDate().toLocaleString("en-IN", {
+                        timeZone: "Asia/Kolkata"
+                    }).toString() : null,
                 });
 
                 console.log("cashbackHistory", cashbackHistory)
@@ -453,6 +457,7 @@ exports.addCashbackToExistingCustomer = async (req, res) => {
             cashback: Number(cashback),
             issueCashback: issueCashback || true,
             redeemcashback: false,
+            redeemStatus: "PENDING",
             date: new Date(),
             createdAt: new Date()
         });
@@ -479,7 +484,7 @@ exports.redeemCashbackToExistingCustomer = async (req, res) => {
 
         const {
             customerMobile,
-            billAmount,
+            redeemAmount,
             cashbackId,
 
         } = req.body;
@@ -527,12 +532,16 @@ exports.redeemCashbackToExistingCustomer = async (req, res) => {
         const cashbackData = cashbackDoc.data();
 
          const url = " http://72.62.195.21:8000";
-       // const url = " http://localhost:8000"
+
+
+
+       // const url = "http://localhost:8000"
 
         await axios.post(`${url}/send-notification`, {
             userId,
             notificationId: cashbackId,
-            message: `Shopkeeper wants to redeem ₹${billAmount}. Approve?`
+            redeemAmount: redeemAmount,
+            message: `Shopkeeper wants to redeem ₹${redeemAmount}. Approve?`
         });
 
 
@@ -557,7 +566,9 @@ exports.redeemCashbackToExistingCustomer = async (req, res) => {
 // POST /redeem-response
 exports.updateRedeemStatus = async (req, res) => {
     try {
-        const { cashbackId, action } = req.body;
+        const { cashbackId, action, redeemAmount } = req.body;
+
+        console.log("updateRedeemStatus---", req.body)
 
         if (!cashbackId || !action) {
             return res.status(400).json({
@@ -572,12 +583,15 @@ exports.updateRedeemStatus = async (req, res) => {
             return res.status(404).json({ message: "Cashback not found" });
         }
 
+        const updatedCashbakAmt = cashbackDoc.data().cashback - redeemAmount;
+
         const updateData =
             action === "APPROVED"
                 ? {
                     redeemcashback: true,
                     redeemStatus: "APPROVED",
-                    redeemedAt: new Date()
+                    redeemedAt: new Date(),
+                    cashback: updatedCashbakAmt
                 }
                 : {
                     redeemcashback: false,
@@ -585,7 +599,7 @@ exports.updateRedeemStatus = async (req, res) => {
                 };
 
         await cashbackRef.update(updateData);
-        console.log("redeen updateData", updateData)
+        console.log("redeen updateData", updateData, redeemAmount)
         return res.status(200).json({
             message: `Redeem ${action.toLowerCase()} successfully`
         });
