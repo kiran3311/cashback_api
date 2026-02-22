@@ -48,7 +48,7 @@ exports.getCustomerCashbackDetails = async (req, res) => {
         for (let doc of cashbackSnap.docs) {
             const data = doc.data();
             const cashbackid = doc.id;
-            const { shopkeeperId, cashback, billAmount, date , redeemcashback,issueCashback} = data;
+            const { shopkeeperId, cashback, billAmount, date , redeemcashback,issueCashback, redeemStatus} = data;
  console.log("cashback data----->>>", data);    
             if (!shopMap[shopkeeperId]) {
                 // fetch shopkeeper profile once
@@ -71,7 +71,8 @@ exports.getCustomerCashbackDetails = async (req, res) => {
                     timeZone: "Asia/Kolkata"
                 }).toString(),
                 redeemcashback: redeemcashback || false,
-                issueCashback: issueCashback || false
+                issueCashback: issueCashback || false,
+                redeemStatus : redeemStatus
             });
         }
 
