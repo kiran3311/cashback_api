@@ -40,7 +40,7 @@ exports.addCustomer = async (req, res) => {
     try {
         const { shopkeeperId, name, mobile, customerEmail, cashback, billAmount, issueCashback } = req.body;
 
-        if (!shopkeeperId || !name || !mobile || !customerEmail) {
+        if (!shopkeeperId || !name || !mobile ) {
             return res.status(400).json({ message: "All fields required" });
         }
 
