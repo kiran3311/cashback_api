@@ -401,13 +401,13 @@ exports.addCashbackToExistingCustomer = async (req, res) => {
     try {
         const {
             shopkeeperId,
-            customerMobile,
+            mobile,
             billAmount,
             cashback,
             issueCashback
         } = req.body;
 
-        if (!shopkeeperId || !customerMobile || !billAmount || !cashback) {
+        if (!shopkeeperId || !mobile || !billAmount || !cashback) {
             return res.status(400).json({
                 message: "shopkeeperId, mobile, billAmount and cashback are required"
             });
@@ -415,7 +415,7 @@ exports.addCashbackToExistingCustomer = async (req, res) => {
 
         // 1️⃣ Find customer by mobile
         const userSnap = await db.collection("users")
-            .where("mobile", "==", customerMobile)
+            .where("mobile", "==", mobile)
             .get();
 
         if (userSnap.empty) {
@@ -503,7 +503,7 @@ exports.redeemCashbackToExistingCustomer = async (req, res) => {
         if (userRef.empty) {
             return res.status(404).json({
                 message: "User not registered"
-            });
+            }); 
         }
 
         const userDoc = userRef.docs[0];
