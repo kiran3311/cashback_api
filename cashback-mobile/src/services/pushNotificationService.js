@@ -1,22 +1,27 @@
 import Constants from "expo-constants";
 import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { saveFcmToken } from "../api/notificationApi";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
-
 export async function registerForPushNotifications(userId) {
+  if (Constants.appOwnership === "expo") {
+    return { success: false, reason: "Push notifications require an EAS build on Android." };
+  }
+
   if (!userId || !Device.isDevice) {
     return { success: false, reason: "Push notifications require a physical device." };
   }
+
+  const Notifications = await import("expo-notifications");
+
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
 
   const existingPermission = await Notifications.getPermissionsAsync();
   let finalStatus = existingPermission.status;
