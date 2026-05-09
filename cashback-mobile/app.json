@@ -20,13 +20,22 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "usesCleartextTraffic": true,
+      "package": "com.kiran3311.cashbackmobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      "expo-notifications",
+      "./plugins/withAndroidNetworkSecurity"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "805046e6-71af-4656-8e51-8d6666b4db35"
+      }
+    }
   }
 }

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,11 +13,16 @@ import { getCustomerByMobileNo } from "../../api/customerApi";
 import {
   addCashbackToExistingCustomer,
   addUserToShop,
+  createShop,
   getCustomerListByShopkeeperId,
   getShopsByUserId,
+  redeemCashback,
+  updateCashbackToExistingCustomer,
 } from "../../api/shopkeeperApi";
 import { useAuth } from "../../context/AuthContext";
 import AppButton from "../../ui/AppButton";
+import PullRefreshScrollView from "../../ui/PullRefreshScrollView";
+import TabTransition from "../../ui/TabTransition";
 import { isValidMobile, normalizeMobile } from "../../utils/validation";
 
 const tabs = [
@@ -102,11 +106,13 @@ export default function ShopkeeperHomeScreen() {
   return (
     <View style={styles.appShell}>
       <View style={styles.screen}>
-        {activeTab === "dashboard" ? <DashboardScreen {...screenProps} /> : null}
-        {activeTab === "scan" ? <IssueCashbackScreen {...screenProps} /> : null}
-        {activeTab === "txns" ? <TransactionsScreen {...screenProps} /> : null}
-        {activeTab === "analytics" ? <AnalyticsScreen {...screenProps} /> : null}
-        {activeTab === "settings" ? <SettingsScreen {...screenProps} /> : null}
+        <TabTransition activeKey={activeTab}>
+          {activeTab === "dashboard" ? <DashboardScreen {...screenProps} /> : null}
+          {activeTab === "scan" ? <IssueCashbackScreen {...screenProps} /> : null}
+          {activeTab === "txns" ? <TransactionsScreen {...screenProps} /> : null}
+          {activeTab === "analytics" ? <AnalyticsScreen {...screenProps} /> : null}
+          {activeTab === "settings" ? <SettingsScreen {...screenProps} /> : null}
+        </TabTransition>
       </View>
       <BottomTabs activeTab={activeTab} bottomInset={insets.bottom} onChange={setActiveTab} />
     </View>
@@ -115,10 +121,10 @@ export default function ShopkeeperHomeScreen() {
 
 function DashboardScreen({ user, primaryShop, metrics, isLoading, refresh, setActiveTab, topInset, bottomInset }) {
   return (
-    <ScrollView
+    <PullRefreshScrollView
       contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]}
-      refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
-      showsVerticalScrollIndicator={false}
+      onRefresh={refresh}
+      refreshing={isLoading}
     >
       <View style={[styles.dashboardHero, { paddingTop: 18 + topInset }]}>
         <View style={styles.heroTopRow}>
@@ -157,11 +163,11 @@ function DashboardScreen({ user, primaryShop, metrics, isLoading, refresh, setAc
       {!metrics.transactions.length ? (
         <EmptyState title="No transactions yet" subtitle="Issued cashback will appear here." />
       ) : null}
-    </ScrollView>
+    </PullRefreshScrollView>
   );
 }
 
-function IssueCashbackScreen({ shopkeeperId, refresh, topInset, bottomInset }) {
+function IssueCashbackScreen({ shopkeeperId, refresh, isLoading, topInset, bottomInset }) {
   const [mobile, setMobile] = useState("");
   const [customer, setCustomer] = useState(null);
   const [billAmount, setBillAmount] = useState("");
@@ -240,7 +246,11 @@ function IssueCashbackScreen({ shopkeeperId, refresh, topInset, bottomInset }) {
   };
 
   return (
-    <ScrollView contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]} showsVerticalScrollIndicator={false}>
+    <PullRefreshScrollView
+      contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]}
+      onRefresh={refresh}
+      refreshing={isLoading}
+    >
       <View style={[styles.simpleHero, { paddingTop: 20 + topInset }]}>
         <Text style={styles.simpleHeroTitle}>Issue Cashback</Text>
         <Text style={styles.simpleHeroSub}>Search customer by mobile number</Text>
@@ -321,7 +331,7 @@ function IssueCashbackScreen({ shopkeeperId, refresh, topInset, bottomInset }) {
           </View>
         </View>
       )}
-    </ScrollView>
+    </PullRefreshScrollView>
   );
 }
 
@@ -329,6 +339,45 @@ function TransactionsScreen({ metrics, customers, isLoading, refresh, topInset, 
   const [mode, setMode] = useState("history");
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [activeActionId, setActiveActionId] = useState(null);
+
+  const updateCashbackRecord = async ({ txn, billAmount, cashback }) => {
+    setActiveActionId(txn.id);
+
+    try {
+      await updateCashbackToExistingCustomer({
+        mobile: txn.mobile,
+        cashbackId: txn.id,
+        billAmount,
+        cashback,
+        issueCashback: true,
+      });
+      Alert.alert("Cashback updated", "The transaction was updated successfully.");
+      refresh();
+    } catch (apiError) {
+      Alert.alert("Unable to update", apiError.friendlyMessage || "Please try again.");
+    } finally {
+      setActiveActionId(null);
+    }
+  };
+
+  const requestRedeem = async ({ txn, redeemAmount }) => {
+    setActiveActionId(txn.id);
+
+    try {
+      await redeemCashback({
+        customerMobile: txn.mobile,
+        cashbackId: txn.id,
+        redeemAmount,
+      });
+      Alert.alert("Redeem requested", "Customer has been notified for approval.");
+      refresh();
+    } catch (apiError) {
+      Alert.alert("Unable to request redeem", apiError.friendlyMessage || "Please try again.");
+    } finally {
+      setActiveActionId(null);
+    }
+  };
 
   const filteredTxns = metrics.transactions.filter(txn => {
     const statusMatch = filter === "All"
@@ -344,10 +393,10 @@ function TransactionsScreen({ metrics, customers, isLoading, refresh, topInset, 
   });
 
   return (
-    <ScrollView
+    <PullRefreshScrollView
       contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]}
-      refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
-      showsVerticalScrollIndicator={false}
+      onRefresh={refresh}
+      refreshing={isLoading}
     >
       <View style={[styles.txnHero, { paddingTop: 20 + topInset }]}>
         <Text style={styles.simpleHeroTitle}>Transactions</Text>
@@ -379,7 +428,15 @@ function TransactionsScreen({ metrics, customers, isLoading, refresh, topInset, 
             <Text style={styles.recordCount}>{filteredTxns.length} records</Text>
           </View>
 
-          {filteredTxns.map(txn => <HistoryCard key={txn.id} txn={txn} />)}
+          {filteredTxns.map(txn => (
+            <HistoryCard
+              busy={activeActionId === txn.id}
+              key={txn.id}
+              onRedeem={requestRedeem}
+              onUpdate={updateCashbackRecord}
+              txn={txn}
+            />
+          ))}
           {!filteredTxns.length ? <EmptyState title="No cashback records" subtitle="Try another filter." /> : null}
         </>
       ) : (
@@ -399,15 +456,19 @@ function TransactionsScreen({ metrics, customers, isLoading, refresh, topInset, 
           {!filteredCustomers.length ? <EmptyState title="No customers found" subtitle="Customers linked to this shopkeeper appear here." /> : null}
         </>
       )}
-    </ScrollView>
+    </PullRefreshScrollView>
   );
 }
 
-function AnalyticsScreen({ metrics, topInset, bottomInset }) {
+function AnalyticsScreen({ metrics, refresh, isLoading, topInset, bottomInset }) {
   const max = Math.max(...metrics.weeklyRevenue, 1);
 
   return (
-    <ScrollView contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]} showsVerticalScrollIndicator={false}>
+    <PullRefreshScrollView
+      contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]}
+      onRefresh={refresh}
+      refreshing={isLoading}
+    >
       <Text style={[styles.pageTitle, { marginTop: 18 + topInset }]}>Analytics</Text>
 
       <View style={styles.analyticsHero}>
@@ -443,11 +504,20 @@ function AnalyticsScreen({ metrics, topInset, bottomInset }) {
         ))}
         {!metrics.topCustomers.length ? <Text style={styles.mutedText}>No customer analytics yet.</Text> : null}
       </View>
-    </ScrollView>
+    </PullRefreshScrollView>
   );
 }
 
-function SettingsScreen({ user, primaryShop, signOut, topInset, bottomInset }) {
+function SettingsScreen({ user, shops, primaryShop, shopkeeperId, signOut, refresh, isLoading, topInset, bottomInset }) {
+  const [shopName, setShopName] = useState("");
+  const [ownerName, setOwnerName] = useState(user?.name || "");
+  const [mobile, setMobile] = useState(user?.mobile || "");
+  const [address, setAddress] = useState("");
+  const [pincode, setPincode] = useState("");
+  const [gst, setGst] = useState("");
+  const [isSavingShop, setIsSavingShop] = useState(false);
+  const [shopMessage, setShopMessage] = useState("");
+
   const menu = [
     { icon: "👤", label: "Edit Profile" },
     { icon: "🔔", label: "Notifications" },
@@ -457,8 +527,44 @@ function SettingsScreen({ user, primaryShop, signOut, topInset, bottomInset }) {
     { icon: "ℹ", label: "About CashBack" },
   ];
 
+  const saveShop = async () => {
+    if (!shopName.trim() || !ownerName.trim() || !mobile.trim()) {
+      setShopMessage("Shop name, owner name and mobile are required.");
+      return;
+    }
+
+    setIsSavingShop(true);
+    setShopMessage("");
+
+    try {
+      await createShop({
+        shopkeeperId,
+        shopName: shopName.trim(),
+        ownerName: ownerName.trim(),
+        mobile: mobile.trim(),
+        address: address.trim(),
+        pincode: pincode.trim(),
+        gst: gst.trim(),
+      });
+      setShopMessage("Shop created successfully.");
+      setShopName("");
+      setAddress("");
+      setPincode("");
+      setGst("");
+      refresh();
+    } catch (apiError) {
+      setShopMessage(apiError.friendlyMessage || "Unable to create shop.");
+    } finally {
+      setIsSavingShop(false);
+    }
+  };
+
   return (
-    <ScrollView contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]} showsVerticalScrollIndicator={false}>
+    <PullRefreshScrollView
+      contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]}
+      onRefresh={refresh}
+      refreshing={isLoading}
+    >
       <View style={[styles.settingsHero, { paddingTop: 18 + topInset }]}>
         <View style={styles.shopAvatar}>
           <Text style={styles.shopAvatarIcon}>🏪</Text>
@@ -478,10 +584,77 @@ function SettingsScreen({ user, primaryShop, signOut, topInset, bottomInset }) {
         ))}
       </View>
 
+      <View style={styles.whitePanel}>
+        <Text style={styles.panelTitle}>Create Shop</Text>
+        <TextInput
+          onChangeText={setShopName}
+          placeholder="Shop name"
+          placeholderTextColor="#94a3b8"
+          style={styles.inputBox}
+          value={shopName}
+        />
+        <TextInput
+          onChangeText={setOwnerName}
+          placeholder="Owner name"
+          placeholderTextColor="#94a3b8"
+          style={styles.inputBox}
+          value={ownerName}
+        />
+        <TextInput
+          keyboardType="number-pad"
+          onChangeText={setMobile}
+          placeholder="Mobile"
+          placeholderTextColor="#94a3b8"
+          style={styles.inputBox}
+          value={mobile}
+        />
+        <TextInput
+          onChangeText={setAddress}
+          placeholder="Address"
+          placeholderTextColor="#94a3b8"
+          style={styles.inputBox}
+          value={address}
+        />
+        <View style={styles.twoColumnRow}>
+          <TextInput
+            keyboardType="number-pad"
+            onChangeText={setPincode}
+            placeholder="Pincode"
+            placeholderTextColor="#94a3b8"
+            style={[styles.inputBox, styles.halfInput]}
+            value={pincode}
+          />
+          <TextInput
+            autoCapitalize="characters"
+            onChangeText={setGst}
+            placeholder="GST"
+            placeholderTextColor="#94a3b8"
+            style={[styles.inputBox, styles.halfInput]}
+            value={gst}
+          />
+        </View>
+        {shopMessage ? <Text style={styles.inlineError}>{shopMessage}</Text> : null}
+        <AppButton loading={isSavingShop} onPress={saveShop} title="Save Shop" />
+      </View>
+
+      <View style={styles.whitePanel}>
+        <Text style={styles.panelTitle}>Your Shops</Text>
+        {(shops || []).map(shop => (
+          <View key={shop.shopId} style={styles.shopListRow}>
+            <View>
+              <Text style={styles.customerName}>{shop.shopName}</Text>
+              <Text style={styles.customerMeta}>{shop.address || "No address added"}</Text>
+            </View>
+            <Text style={styles.shopBadge}>{shop.pincode || "Active"}</Text>
+          </View>
+        ))}
+        {!shops?.length ? <Text style={styles.mutedText}>No shops created yet.</Text> : null}
+      </View>
+
       <TouchableOpacity onPress={signOut} style={styles.signOutButton}>
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
-    </ScrollView>
+    </PullRefreshScrollView>
   );
 }
 
@@ -544,21 +717,91 @@ function TransactionRow({ txn }) {
   );
 }
 
-function HistoryCard({ txn }) {
+function HistoryCard({ busy, onRedeem, onUpdate, txn }) {
   const status = statusColors[txn.status] || statusColors.PENDING;
+  const [isEditing, setIsEditing] = useState(false);
+  const [billAmount, setBillAmount] = useState(String(txn.billAmount || ""));
+  const [cashback, setCashback] = useState(String(txn.cashback || ""));
+  const [redeemAmount, setRedeemAmount] = useState(String(txn.cashback || ""));
+
+  const submitUpdate = () => {
+    const bill = Number(billAmount);
+    const cb = Number(cashback);
+
+    if (!bill || bill <= 0 || !cb || cb <= 0) {
+      Alert.alert("Invalid amount", "Enter valid bill and cashback amounts.");
+      return;
+    }
+
+    onUpdate({ txn, billAmount: bill, cashback: cb });
+    setIsEditing(false);
+  };
+
+  const submitRedeem = () => {
+    const amount = Number(redeemAmount);
+
+    if (!amount || amount <= 0 || amount > txn.cashback) {
+      Alert.alert("Invalid redeem amount", "Enter an amount within available cashback.");
+      return;
+    }
+
+    onRedeem({ txn, redeemAmount: amount });
+  };
+
   return (
-    <View style={styles.historyCard}>
-      <Avatar name={txn.customerName} large />
-      <View style={styles.historyMiddle}>
-        <Text style={styles.customerName}>{txn.customerName}</Text>
-        <Text style={styles.customerMeta}>{txn.timeLabel}</Text>
-        <View style={[styles.historyStatus, { backgroundColor: status.bg }]}>
-          <Text style={[styles.historyStatusText, { color: status.text }]}>{status.label}</Text>
+    <View style={styles.historyCardShell}>
+      <View style={styles.historyCard}>
+        <Avatar name={txn.customerName} large />
+        <View style={styles.historyMiddle}>
+          <Text style={styles.customerName}>{txn.customerName}</Text>
+          <Text style={styles.customerMeta}>{txn.timeLabel}</Text>
+          <View style={[styles.historyStatus, { backgroundColor: status.bg }]}>
+            <Text style={[styles.historyStatusText, { color: status.text }]}>{status.label}</Text>
+          </View>
+        </View>
+        <View style={styles.txnRight}>
+          <Text style={styles.historyCashback}>{formatCurrency(txn.cashback)}</Text>
+          <Text style={styles.customerMeta}>Bill {formatCurrency(txn.billAmount)}</Text>
         </View>
       </View>
-      <View style={styles.txnRight}>
-        <Text style={styles.historyCashback}>{formatCurrency(txn.cashback)}</Text>
-        <Text style={styles.customerMeta}>Bill {formatCurrency(txn.billAmount)}</Text>
+      {isEditing ? (
+        <View style={styles.historyEditor}>
+          <TextInput
+            keyboardType="decimal-pad"
+            onChangeText={setBillAmount}
+            placeholder="Bill amount"
+            placeholderTextColor="#94a3b8"
+            style={[styles.inputBox, styles.actionInput]}
+            value={billAmount}
+          />
+          <TextInput
+            keyboardType="decimal-pad"
+            onChangeText={setCashback}
+            placeholder="Cashback"
+            placeholderTextColor="#94a3b8"
+            style={[styles.inputBox, styles.actionInput]}
+            value={cashback}
+          />
+          <TouchableOpacity disabled={busy} onPress={submitUpdate} style={[styles.smallActionButton, styles.saveActionButton]}>
+            <Text style={styles.smallActionLightText}>{busy ? "Saving..." : "Save"}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      <View style={styles.historyActions}>
+        <TouchableOpacity onPress={() => setIsEditing(value => !value)} style={styles.smallActionButton}>
+          <Text style={styles.smallActionText}>{isEditing ? "Cancel" : "Update"}</Text>
+        </TouchableOpacity>
+        <TextInput
+          keyboardType="decimal-pad"
+          onChangeText={setRedeemAmount}
+          placeholder="Redeem"
+          placeholderTextColor="#94a3b8"
+          style={styles.redeemInput}
+          value={redeemAmount}
+        />
+        <TouchableOpacity disabled={busy || txn.status === "APPROVED"} onPress={submitRedeem} style={[styles.smallActionButton, styles.redeemActionButton]}>
+          <Text style={styles.smallActionLightText}>{busy ? "Sending..." : "Redeem"}</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -1084,6 +1327,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 16,
   },
+  twoColumnRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  halfInput: {
+    flex: 1,
+  },
   txnHero: {
     backgroundColor: "#18733b",
     borderBottomLeftRadius: 28,
@@ -1175,13 +1425,16 @@ const styles = StyleSheet.create({
     color: "#66766a",
     fontSize: 12,
   },
-  historyCard: {
+  historyCardShell: {
     marginHorizontal: 16,
     marginBottom: 10,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#cfe0d5",
     backgroundColor: "#ffffff",
+    overflow: "hidden",
+  },
+  historyCard: {
     padding: 14,
     flexDirection: "row",
     alignItems: "center",
@@ -1203,6 +1456,54 @@ const styles = StyleSheet.create({
   historyCashback: {
     color: "#18733b",
     fontSize: 17,
+    fontWeight: "900",
+  },
+  historyEditor: {
+    borderTopWidth: 1,
+    borderTopColor: "#d9e5de",
+    padding: 12,
+  },
+  historyActions: {
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: "#d9e5de",
+    flexDirection: "row",
+    gap: 8,
+    padding: 12,
+  },
+  actionInput: {
+    marginBottom: 10,
+  },
+  redeemInput: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#cfe0d5",
+    color: "#122018",
+    flex: 1,
+    minHeight: 40,
+    paddingHorizontal: 10,
+  },
+  smallActionButton: {
+    alignItems: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#18733b",
+    minHeight: 40,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  saveActionButton: {
+    backgroundColor: "#18733b",
+  },
+  redeemActionButton: {
+    backgroundColor: "#18733b",
+  },
+  smallActionText: {
+    color: "#18733b",
+    fontWeight: "900",
+  },
+  smallActionLightText: {
+    color: "#ffffff",
     fontWeight: "900",
   },
   searchBox: {
@@ -1393,6 +1694,24 @@ const styles = StyleSheet.create({
     borderColor: "#cfe0d5",
     backgroundColor: "#ffffff",
     overflow: "hidden",
+  },
+  shopListRow: {
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#d9e5de",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+  },
+  shopBadge: {
+    backgroundColor: "#e8f4ed",
+    borderRadius: 10,
+    color: "#18733b",
+    fontSize: 12,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   settingsRow: {
     minHeight: 58,

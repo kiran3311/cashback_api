@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { clearAuthUser, getAuthUser, saveAuthUser } from "../storage/authStorage";
+import { registerForPushNotifications } from "../services/pushNotificationService";
 
 const AuthContext = createContext(null);
 
@@ -44,6 +45,9 @@ export function AuthProvider({ children }) {
     signIn: async nextUser => {
       await saveAuthUser(nextUser);
       setUser(nextUser);
+      registerForPushNotifications(nextUser?.userId).catch(error => {
+        console.log("[Notifications] Token registration failed:", error.message);
+      });
     },
     signOut: async () => {
       await clearAuthUser();

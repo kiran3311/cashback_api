@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  RefreshControl,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,8 +9,10 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getCustomerCashbackList } from "../../api/customerApi";
+import { getCustomerCashbackList, updateRedeemStatus } from "../../api/customerApi";
 import { useAuth } from "../../context/AuthContext";
+import PullRefreshScrollView from "../../ui/PullRefreshScrollView";
+import TabTransition from "../../ui/TabTransition";
 
 const tabs = [
   { key: "home", label: "Home", icon: "⌂" },
@@ -78,11 +80,13 @@ export default function CustomerHomeScreen() {
   return (
     <View style={styles.appShell}>
       <View style={styles.screen}>
-        {activeTab === "home" ? <HomeScreen {...screenProps} /> : null}
-        {activeTab === "scan" ? <ScanScreen {...screenProps} /> : null}
-        {activeTab === "wallet" ? <WalletScreen {...screenProps} /> : null}
-        {activeTab === "offers" ? <OffersScreen {...screenProps} /> : null}
-        {activeTab === "profile" ? <ProfileScreen {...screenProps} /> : null}
+        <TabTransition activeKey={activeTab}>
+          {activeTab === "home" ? <HomeScreen {...screenProps} /> : null}
+          {activeTab === "scan" ? <ScanScreen {...screenProps} /> : null}
+          {activeTab === "wallet" ? <WalletScreen {...screenProps} /> : null}
+          {activeTab === "offers" ? <OffersScreen {...screenProps} /> : null}
+          {activeTab === "profile" ? <ProfileScreen {...screenProps} /> : null}
+        </TabTransition>
       </View>
       <BottomTabs activeTab={activeTab} bottomInset={insets.bottom} onChange={setActiveTab} />
     </View>
@@ -91,10 +95,10 @@ export default function CustomerHomeScreen() {
 
 function HomeScreen({ user, metrics, isLoading, error, refresh, setActiveTab, topInset, bottomInset }) {
   return (
-    <ScrollView
+    <PullRefreshScrollView
       contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]}
-      refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
-      showsVerticalScrollIndicator={false}
+      onRefresh={refresh}
+      refreshing={isLoading}
     >
       <View style={[styles.homeHero, { paddingTop: 18 + topInset }]}>
         <View style={styles.heroTop}>
@@ -143,13 +147,17 @@ function HomeScreen({ user, metrics, isLoading, error, refresh, setActiveTab, to
       <SectionHeader title="Recent Activity" action="See all →" onPress={() => setActiveTab("wallet")} />
       {metrics.transactions.slice(0, 5).map(txn => <ActivityRow key={txn.id} txn={txn} />)}
       {!metrics.transactions.length ? <EmptyState title="No activity yet" subtitle="Your cashback activity will appear here." /> : null}
-    </ScrollView>
+    </PullRefreshScrollView>
   );
 }
 
-function ScanScreen({ topInset, bottomInset }) {
+function ScanScreen({ refresh, isLoading, topInset, bottomInset }) {
   return (
-    <ScrollView contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]} showsVerticalScrollIndicator={false}>
+    <PullRefreshScrollView
+      contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]}
+      onRefresh={refresh}
+      refreshing={isLoading}
+    >
       <View style={[styles.simpleHero, { paddingTop: 24 + topInset }]}>
         <Text style={styles.simpleHeroTitle}>Scan & Earn</Text>
         <Text style={styles.simpleHeroSub}>Show your mobile number or customer ID at the store.</Text>
@@ -159,16 +167,36 @@ function ScanScreen({ topInset, bottomInset }) {
         <Text style={styles.scanTitle}>Customer QR Coming Soon</Text>
         <Text style={styles.scanText}>For now, share your registered mobile number with the shopkeeper to receive cashback.</Text>
       </View>
-    </ScrollView>
+    </PullRefreshScrollView>
   );
 }
 
 function WalletScreen({ metrics, isLoading, refresh, topInset, bottomInset }) {
+  const [updatingId, setUpdatingId] = useState(null);
+
+  const respondToRedeem = async (txn, action) => {
+    setUpdatingId(txn.id);
+
+    try {
+      await updateRedeemStatus({
+        cashbackId: txn.id,
+        action,
+        redeemAmount: txn.cashback,
+      });
+      Alert.alert("Redeem updated", `Redeem request ${action.toLowerCase()}.`);
+      refresh();
+    } catch (apiError) {
+      Alert.alert("Unable to update", apiError.friendlyMessage || "Please try again.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   return (
-    <ScrollView
+    <PullRefreshScrollView
       contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]}
-      refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
-      showsVerticalScrollIndicator={false}
+      onRefresh={refresh}
+      refreshing={isLoading}
     >
       <View style={[styles.walletHero, { paddingTop: 22 + topInset }]}>
         <Text style={styles.simpleHeroTitle}>My Wallet</Text>
@@ -183,22 +211,33 @@ function WalletScreen({ metrics, isLoading, refresh, topInset, bottomInset }) {
       </View>
 
       <Text style={styles.pageSectionTitle}>Transaction History</Text>
-      {metrics.transactions.map(txn => <WalletTxnRow key={txn.id} txn={txn} />)}
+      {metrics.transactions.map(txn => (
+        <WalletTxnRow
+          key={txn.id}
+          onRespond={respondToRedeem}
+          txn={txn}
+          updating={updatingId === txn.id}
+        />
+      ))}
       {!metrics.transactions.length ? <EmptyState title="No wallet transactions" subtitle="Cashback earned and redeemed will appear here." /> : null}
-    </ScrollView>
+    </PullRefreshScrollView>
   );
 }
 
-function OffersScreen({ bottomInset }) {
+function OffersScreen({ refresh, isLoading, bottomInset }) {
   return (
-    <ScrollView contentContainerStyle={[styles.scrollWithTabs, styles.offersScreen, { paddingBottom: 92 + bottomInset }]} showsVerticalScrollIndicator={false}>
+    <PullRefreshScrollView
+      contentContainerStyle={[styles.scrollWithTabs, styles.offersScreen, { paddingBottom: 92 + bottomInset }]}
+      onRefresh={refresh}
+      refreshing={isLoading}
+    >
       <Text style={styles.offersTitle}>Offers for You</Text>
       {offers.map(offer => <OfferCard key={offer.id} offer={offer} />)}
-    </ScrollView>
+    </PullRefreshScrollView>
   );
 }
 
-function ProfileScreen({ user, metrics, signOut, topInset, bottomInset }) {
+function ProfileScreen({ user, metrics, signOut, refresh, isLoading, topInset, bottomInset }) {
   const menu = [
     { icon: "👤", label: "Edit Profile" },
     { icon: "🔔", label: "Notifications" },
@@ -209,7 +248,11 @@ function ProfileScreen({ user, metrics, signOut, topInset, bottomInset }) {
   ];
 
   return (
-    <ScrollView contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]} showsVerticalScrollIndicator={false}>
+    <PullRefreshScrollView
+      contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]}
+      onRefresh={refresh}
+      refreshing={isLoading}
+    >
       <View style={[styles.profileHero, { paddingTop: 22 + topInset }]}>
         <View style={styles.profileAvatar}>
           <Text style={styles.profileAvatarText}>👤</Text>
@@ -240,7 +283,7 @@ function ProfileScreen({ user, metrics, signOut, topInset, bottomInset }) {
       <TouchableOpacity onPress={signOut} style={styles.signOutButton}>
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
-    </ScrollView>
+    </PullRefreshScrollView>
   );
 }
 
@@ -315,29 +358,51 @@ function OfferCard({ offer }) {
   );
 }
 
-function ActivityRow({ txn }) {
+function ActivityRow({ txn, onRespond, updating }) {
   const redeemed = txn.status === "APPROVED" || txn.redeemcashback;
+  const canRespond = onRespond && txn.status === "PENDING" && !txn.redeemcashback && txn.cashback > 0;
+
   return (
-    <View style={styles.activityRow}>
-      <View style={[styles.activityIcon, redeemed ? styles.activityRedeemIcon : null]}>
-        <Text style={styles.activityArrow}>{redeemed ? "↓" : "↑"}</Text>
+    <View style={styles.activityCard}>
+      <View style={styles.activityRow}>
+        <View style={[styles.activityIcon, redeemed ? styles.activityRedeemIcon : null]}>
+          <Text style={styles.activityArrow}>{redeemed ? "↓" : "↑"}</Text>
+        </View>
+        <View style={styles.activityMiddle}>
+          <Text style={styles.activityShop}>{txn.shopName}</Text>
+          <Text style={styles.activityMeta}>{txn.timeLabel}</Text>
+        </View>
+        <View style={styles.activityRight}>
+          <Text style={[styles.activityCashback, redeemed ? styles.redeemedText : null]}>
+            {redeemed ? "-" : "+"}{formatCurrency(txn.cashback)}
+          </Text>
+          <Text style={styles.activityBill}>{formatCurrency(txn.billAmount)} spent</Text>
+        </View>
       </View>
-      <View style={styles.activityMiddle}>
-        <Text style={styles.activityShop}>{txn.shopName}</Text>
-        <Text style={styles.activityMeta}>{txn.timeLabel}</Text>
-      </View>
-      <View style={styles.activityRight}>
-        <Text style={[styles.activityCashback, redeemed ? styles.redeemedText : null]}>
-          {redeemed ? "-" : "+"}{formatCurrency(txn.cashback)}
-        </Text>
-        <Text style={styles.activityBill}>{formatCurrency(txn.billAmount)} spent</Text>
-      </View>
+      {canRespond ? (
+        <View style={styles.redeemActions}>
+          <TouchableOpacity
+            disabled={updating}
+            onPress={() => onRespond(txn, "APPROVED")}
+            style={[styles.redeemButton, styles.approveButton]}
+          >
+            <Text style={styles.approveText}>{updating ? "Updating..." : "Approve Redeem"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            disabled={updating}
+            onPress={() => onRespond(txn, "REJECTED")}
+            style={[styles.redeemButton, styles.rejectButton]}
+          >
+            <Text style={styles.rejectText}>Reject</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function WalletTxnRow({ txn }) {
-  return <ActivityRow txn={txn} />;
+function WalletTxnRow({ txn, onRespond, updating }) {
+  return <ActivityRow onRespond={onRespond} txn={txn} updating={updating} />;
 }
 
 function WalletStat({ label, value }) {
@@ -620,14 +685,16 @@ const styles = StyleSheet.create({
     color: "#d4eadb",
     fontSize: 10,
   },
-  activityRow: {
+  activityCard: {
     marginHorizontal: 16,
     marginBottom: 10,
-    minHeight: 66,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#cfe0d5",
     backgroundColor: "#ffffff",
+  },
+  activityRow: {
+    minHeight: 66,
     padding: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -675,6 +742,36 @@ const styles = StyleSheet.create({
   activityBill: {
     color: "#66766a",
     fontSize: 12,
+  },
+  redeemActions: {
+    borderTopWidth: 1,
+    borderTopColor: "#d9e5de",
+    flexDirection: "row",
+    gap: 10,
+    padding: 12,
+  },
+  redeemButton: {
+    alignItems: "center",
+    borderRadius: 10,
+    flex: 1,
+    minHeight: 42,
+    justifyContent: "center",
+  },
+  approveButton: {
+    backgroundColor: "#18733b",
+  },
+  rejectButton: {
+    backgroundColor: "#fff1f1",
+    borderColor: "#ef4444",
+    borderWidth: 1,
+  },
+  approveText: {
+    color: "#ffffff",
+    fontWeight: "900",
+  },
+  rejectText: {
+    color: "#ef4444",
+    fontWeight: "900",
   },
   simpleHero: {
     backgroundColor: "#18733b",

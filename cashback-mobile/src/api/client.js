@@ -9,9 +9,25 @@ const apiClient = axios.create({
   },
 });
 
+const RETRY_LIMIT = 2;
+const RETRY_DELAY_MS = 650;
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 apiClient.interceptors.response.use(
   response => response,
-  error => {
+  async error => {
+    const config = error.config || {};
+    const status = error.response?.status;
+    const shouldRetry = !config.__skipRetry
+      && (error.code === "ECONNABORTED" || !error.response || status >= 500)
+      && (config.__retryCount || 0) < RETRY_LIMIT;
+
+    if (shouldRetry) {
+      config.__retryCount = (config.__retryCount || 0) + 1;
+      await sleep(RETRY_DELAY_MS * config.__retryCount);
+      return apiClient(config);
+    }
+
     const message = error.response?.data?.message || error.response?.data?.error || error.message;
     return Promise.reject({
       ...error,

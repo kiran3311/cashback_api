@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Socket.IO Approval Client</title>
+</head>
+<body>
+  <h2>Socket.IO Approval Example2</h2>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    /**
+     * STEP 1: CONNECT TO SERVER
+     */
+
+    // const url = "http://localhost:8000"
+     const url = "http://72.62.195.21:8000"
+    const socket = io(url);
+
+    const USER_ID = "vOiA8xpDZuIKb7ieX1YF";
+
+    socket.on("connect", () => {
+      console.log("Connected to server");
+
+      /**
+       * STEP 2: REGISTER USER (JOIN ROOM)
+       */
+      socket.emit("register", USER_ID);
+    });
+
+    /**
+     * STEP 4: RECEIVE NOTIFICATION
+     */
+    socket.on("notification", (data) => {
+      
+      
+
+      const approve = confirm(data.message + "\n\nOK = Approve | Cancel = Reject");
+
+      /**
+       * STEP 5: SEND RESPONSE
+       */
+
+       console.log("rrrrrr:", data);
+      socket.emit("notification-response", {
+        notificationId: data.notificationId,
+        userId: USER_ID,
+        action: approve ? "APPROVED" : "REJECTED",
+        redeemAmount: data.redeemAmount
+      });
+    });
+  </script>
+</body>
+</html>
