@@ -2,7 +2,21 @@ const db = require("../config/firebase");
 const { encrypt, decrypt } = require("../encryption/crypto");
 const { sendInviteEmail } = require("../services/emailService");
 const { sendInviteEmail_2 } = require("../services/sendgridmailService");
+const {
+    sendCashbackReceivedNotification,
+    sendRedeemStatusNotification
+} = require("../services/firebaseNotificationService");
+const { logError } = require("../services/loggerService");
 const axios = require("axios");
+
+const logControllerError = (source, error, req) => {
+    logError(source, error, {
+        type: "CONTROLLER_ERROR",
+        userId: req.body?.userId || req.body?.shopkeeperId || null,
+        mobile: req.body?.mobile || req.body?.customerMobile || null,
+        body: req.body
+    });
+};
 
 exports.addCustomerToShopkeeper = async (req, res) => {
 
@@ -15,6 +29,7 @@ exports.addCustomerToShopkeeper = async (req, res) => {
         const ref = await db.collection("users").add(data);
         res.status(200).send({ id: ref.id, message: "User added!" });
     } catch (err) {
+        logControllerError("addCustomerToShopkeeper failed", err, req);
         res.status(500).send(err);
     }
 
@@ -29,6 +44,7 @@ exports.getAllCustomerWithShopkeeperId = async (req, res) => {
         const ref = await db.collection("users").add(data);
         res.status(200).send({ id: ref.id, message: "User added!" });
     } catch (err) {
+        logControllerError("getAllCustomerWithShopkeeperId failed", err, req);
         res.status(500).send(err);
     }
 
@@ -89,7 +105,7 @@ exports.addCustomer = async (req, res) => {
             }, { merge: true });
 
         // 4️⃣ Add cashback entry
-        await db.collection("cashbacks").add({
+        const cashbackRef = await db.collection("cashbacks").add({
             userId,
             shopkeeperId,
             billAmount: Number(billAmount),
@@ -99,6 +115,16 @@ exports.addCustomer = async (req, res) => {
             date: new Date()
         });
 
+        sendCashbackReceivedNotification({
+            userId,
+            cashback: Number(cashback) || 0,
+            billAmount: Number(billAmount) || 0,
+            cashbackId: cashbackRef.id,
+            shopkeeperId
+        }).catch(error => {
+            console.log("[FCM] Cashback received notification error:", error.message);
+        });
+
         return res.status(200).json({
             message: "Customer added and cashback updated",
             userId
@@ -106,6 +132,7 @@ exports.addCustomer = async (req, res) => {
 
     } catch (error) {
         console.error(error);
+        logControllerError("addCustomer failed", error, req);
         return res.status(500).json({ message: "Server error" });
     }
 };
@@ -166,6 +193,7 @@ exports.createShop = async (req, res) => {
 
     } catch (error) {
         console.error("createShop error:", error);
+        logControllerError("createShop failed", error, req);
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
@@ -206,6 +234,7 @@ exports.getShopsByUserId = async (req, res) => {
 
     } catch (error) {
         console.error("getShopsByUserId error:", error);
+        logControllerError("getShopsByUserId failed", error, req);
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
@@ -303,6 +332,7 @@ exports.getCustomersByShopkeeper = async (req, res) => {
 
     } catch (error) {
         console.error(error);
+        logControllerError("getCustomersByShopkeeper failed", error, req);
         return res.status(500).json({
             message: "Server error",
             error: error.message
@@ -387,6 +417,7 @@ exports.updateCashbackToExistingCustomer = async (req, res) => {
 
     } catch (error) {
         console.error(error);
+        logControllerError("updateCashbackToExistingCustomer failed", error, req);
         return res.status(500).json({
             message: "Server error",
             error: error.message
@@ -462,6 +493,16 @@ exports.addCashbackToExistingCustomer = async (req, res) => {
             createdAt: new Date()
         });
 
+        sendCashbackReceivedNotification({
+            userId,
+            cashback: Number(cashback) || 0,
+            billAmount: Number(billAmount) || 0,
+            cashbackId: cashbackRef.id,
+            shopkeeperId
+        }).catch(error => {
+            console.log("[FCM] Cashback received notification error:", error.message);
+        });
+
         return res.status(200).json({
             message: "Cashback added successfully",
             cashbackId: cashbackRef.id,
@@ -470,6 +511,7 @@ exports.addCashbackToExistingCustomer = async (req, res) => {
 
     } catch (error) {
         console.error(error);
+        logControllerError("addCashbackToExistingCustomer failed", error, req);
         return res.status(500).json({
             message: "Server error",
             error: error.message
@@ -553,6 +595,7 @@ exports.redeemCashbackToExistingCustomer = async (req, res) => {
 
     } catch (error) {
         console.error(error);
+        logControllerError("redeemCashbackToExistingCustomer failed", error, req);
         return res.status(500).json({
             message: "Server error",
             error: error.message
@@ -599,6 +642,23 @@ exports.updateRedeemStatus = async (req, res) => {
                 };
 
         await cashbackRef.update(updateData);
+
+        const cashbackData = cashbackDoc.data();
+        const notificationUserId = action === "APPROVED"
+            ? cashbackData.shopkeeperId
+            : cashbackData.userId;
+
+        if (notificationUserId) {
+            sendRedeemStatusNotification({
+                userId: notificationUserId,
+                cashbackId,
+                action,
+                redeemAmount
+            }).catch(error => {
+                console.log("[FCM] Redeem status notification error:", error.message);
+            });
+        }
+
         console.log("redeen updateData", updateData, redeemAmount)
         return res.status(200).json({
             message: `Redeem ${action.toLowerCase()} successfully`
@@ -606,6 +666,7 @@ exports.updateRedeemStatus = async (req, res) => {
 
     } catch (error) {
         console.error(error);
+        logControllerError("updateRedeemStatus failed", error, req);
         return res.status(500).json({
             message: "Server error",
             error: error.message

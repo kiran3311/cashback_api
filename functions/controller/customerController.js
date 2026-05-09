@@ -1,6 +1,16 @@
 const db = require("../config/firebase");
 const { encrypt, decrypt } = require("../encryption/crypto");
 const { sendInviteEmail } = require("../services/emailService");
+const { logError } = require("../services/loggerService");
+
+const logControllerError = (source, error, req) => {
+    logError(source, error, {
+        type: "CONTROLLER_ERROR",
+        userId: req.body?.userId || null,
+        mobile: req.body?.mobile || null,
+        body: req.body
+    });
+};
 
 
 exports.getCustomerCashbackDetails = async (req, res) => {
@@ -84,6 +94,7 @@ exports.getCustomerCashbackDetails = async (req, res) => {
 
     } catch (error) {
         console.error(error);
+        logControllerError("getCustomerCashbackDetails failed", error, req);
         return res.status(500).json({
             message: "Server error",
             error: error.message
@@ -122,6 +133,7 @@ exports.getCustomerByMobileNo = async (req, res) => {
         });
     } catch (err) {
         console.error(err);
+        logControllerError("getCustomerByMobileNo failed", err, req);
         res.status(500).send(err);
     }
 }

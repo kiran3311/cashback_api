@@ -1,5 +1,15 @@
 const db = require("../config/firebase");
 const { encrypt, decrypt } = require("../encryption/crypto");
+const { logError } = require("../services/loggerService");
+
+const logControllerError = (source, error, req) => {
+    logError(source, error, {
+        type: "CONTROLLER_ERROR",
+        userId: req.body?.userId || null,
+        mobile: req.body?.mobile || req.body?.emailOrMobile || null,
+        body: req.body
+    });
+};
 
 
 exports.createUser = async (req, res) => {
@@ -9,6 +19,7 @@ exports.createUser = async (req, res) => {
         const ref = await db.collection("users").add(data);
         res.status(200).send({ id: ref.id, message: "User added!" });
     } catch (err) {
+        logControllerError("createUser failed", err, req);
         res.status(500).send(err);
     }
 
@@ -22,6 +33,7 @@ exports.getAllUsers = async (req, res) => {
         const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         res.status(200).send(users);
     } catch (err) {
+        logControllerError("getAllUsers failed", err, req);
         res.status(500).send(err);
     }
 }
@@ -89,6 +101,7 @@ exports.register = async (req, res) => {
 
     } catch (err) {
         console.error(err);
+        logControllerError("register failed", err, req);
         res.status(500).json({ message: "Server error" });
     }
 };
@@ -154,6 +167,7 @@ exports.login = async (req, res) => {
 
     } catch (error) {
         console.error(error);
+        logControllerError("login failed", error, req);
         res.status(500).json({ message: "Server error" });
     }
 };

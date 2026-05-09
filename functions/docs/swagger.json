@@ -1,0 +1,847 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Cashback API",
+    "version": "1.0.0",
+    "description": "API documentation for user, shopkeeper, customer, cashback, redeem, and OTP endpoints."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5001",
+      "description": "Local development server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Users"
+    },
+    {
+      "name": "Shopkeepers"
+    },
+    {
+      "name": "Customers"
+    },
+    {
+      "name": "OTP"
+    },
+    {
+      "name": "Notifications"
+    }
+  ],
+  "paths": {
+    "/adduser": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Add a user directly",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "example": {
+                "name": "Rahul",
+                "email": "rahul@example.com",
+                "mobile": "9876543210",
+                "profile": "customer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User added"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/getUsers": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get all users",
+        "responses": {
+          "200": {
+            "description": "Users fetched successfully"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/register": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Register a user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              },
+              "example": {
+                "name": "Rahul",
+                "email": "rahul@example.com",
+                "mobile": "9876543210",
+                "profile": "customer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Register response"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/login": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Login by email or mobile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              },
+              "example": {
+                "emailOrMobile": "9876543210"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login response"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/adduserToShop": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Add/link customer to shopkeeper and create cashback entry",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCustomerToShopRequest"
+              },
+              "example": {
+                "shopkeeperId": "shopkeeper_doc_id",
+                "name": "Customer Name",
+                "mobile": "9876543210",
+                "customerEmail": "customer@example.com",
+                "cashback": 50,
+                "billAmount": 1000,
+                "issueCashback": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer added or user not found response"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/createShop": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Create a shop",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShopRequest"
+              },
+              "example": {
+                "shopkeeperId": "shopkeeper_doc_id",
+                "shopName": "My Store",
+                "ownerName": "Owner Name",
+                "mobile": "9876543210",
+                "address": "Main Road",
+                "pincode": "110001",
+                "gst": "GST123"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Shop created"
+          },
+          "400": {
+            "description": "Missing required fields"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/getShopsByUserId": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Get shops by shopkeeper user ID",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopkeeperIdRequest"
+              },
+              "example": {
+                "shopkeeperId": "shopkeeper_doc_id"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Shops fetched"
+          },
+          "400": {
+            "description": "shopkeeperId is required"
+          },
+          "404": {
+            "description": "No shops found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/getCustomerListByShopkeeperId": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Get customers linked to a shopkeeper",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopkeeperIdRequest"
+              },
+              "example": {
+                "shopkeeperId": "shopkeeper_doc_id"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer list fetched"
+          },
+          "400": {
+            "description": "shopkeeperId required"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/updateCashbackToExistingCustomer": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Update an existing cashback record",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCashbackRequest"
+              },
+              "example": {
+                "mobile": "9876543210",
+                "cashbackId": "cashback_doc_id",
+                "billAmount": 1200,
+                "cashback": 60,
+                "issueCashback": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cashback updated"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/addCashbackToExistingCustomer": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Add a new cashback entry to an existing linked customer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCashbackRequest"
+              },
+              "example": {
+                "shopkeeperId": "shopkeeper_doc_id",
+                "mobile": "9876543210",
+                "billAmount": 1000,
+                "cashback": 50,
+                "issueCashback": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cashback added"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "404": {
+            "description": "Customer not registered"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/redeemCashback": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Send cashback redeem request notification",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedeemCashbackRequest"
+              },
+              "example": {
+                "customerMobile": "9876543210",
+                "redeemAmount": 25,
+                "cashbackId": "cashback_doc_id"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Redeem notification sent"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/updateRedeemStatus": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Approve or reject cashback redeem request",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRedeemStatusRequest"
+              },
+              "example": {
+                "cashbackId": "cashback_doc_id",
+                "action": "APPROVED",
+                "redeemAmount": 25
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Redeem status updated"
+          },
+          "400": {
+            "description": "cashbackId and action are required"
+          },
+          "404": {
+            "description": "Cashback not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/getCustCashbackListById": {
+      "post": {
+        "tags": ["Customers"],
+        "summary": "Get customer cashback details by mobile or user ID",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerCashbackRequest"
+              },
+              "example": {
+                "mobile": "9876543210",
+                "userId": "customer_doc_id"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer cashback details fetched"
+          },
+          "400": {
+            "description": "userId or mobile is required"
+          },
+          "404": {
+            "description": "Customer not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/getCustomerByMobileNo": {
+      "post": {
+        "tags": ["Customers"],
+        "summary": "Get customer by mobile number",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileRequest"
+              },
+              "example": {
+                "mobile": "9876543210"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer fetched"
+          },
+          "400": {
+            "description": "Mobile number is required"
+          },
+          "404": {
+            "description": "Customer not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/send-otp": {
+      "post": {
+        "tags": ["OTP"],
+        "summary": "Send OTP to mobile number",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileRequest"
+              },
+              "example": {
+                "mobile": "9876543210"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP sent"
+          },
+          "400": {
+            "description": "Invalid mobile"
+          },
+          "500": {
+            "description": "Failed to send OTP"
+          }
+        }
+      }
+    },
+    "/verify-otp": {
+      "post": {
+        "tags": ["OTP"],
+        "summary": "Verify OTP for mobile number",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyOtpRequest"
+              },
+              "example": {
+                "mobile": "9876543210",
+                "otp": "123456"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Phone verified successfully"
+          },
+          "400": {
+            "description": "Invalid OTP, expired OTP, or verification failed"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/save-fcm-token": {
+      "post": {
+        "tags": ["Notifications"],
+        "summary": "Save Firebase Cloud Messaging token for a user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveFcmTokenRequest"
+              },
+              "example": {
+                "userId": "user_doc_id",
+                "fcmToken": "firebase_device_token"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "FCM token saved"
+          },
+          "400": {
+            "description": "userId and fcmToken are required"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/send-push-notification": {
+      "post": {
+        "tags": ["Notifications"],
+        "summary": "Send a Firebase push notification to a user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendPushNotificationRequest"
+              },
+              "example": {
+                "userId": "user_doc_id",
+                "title": "Cashback received",
+                "body": "You received Rs. 50 cashback.",
+                "data": {
+                  "type": "CASHBACK_RECEIVED",
+                  "cashbackId": "cashback_doc_id"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Notification sent"
+          },
+          "400": {
+            "description": "Missing fields or no FCM token found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "RegisterRequest": {
+        "type": "object",
+        "required": ["name", "email", "mobile", "profile"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "mobile": {
+            "type": "string",
+            "pattern": "^\\d{10}$"
+          },
+          "profile": {
+            "type": "string",
+            "example": "customer"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["emailOrMobile"],
+        "properties": {
+          "emailOrMobile": {
+            "type": "string"
+          }
+        }
+      },
+      "MobileRequest": {
+        "type": "object",
+        "required": ["mobile"],
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "pattern": "^\\d{10}$"
+          }
+        }
+      },
+      "VerifyOtpRequest": {
+        "type": "object",
+        "required": ["mobile", "otp"],
+        "properties": {
+          "mobile": {
+            "type": "string",
+            "pattern": "^\\d{10}$"
+          },
+          "otp": {
+            "type": "string",
+            "pattern": "^\\d{6}$"
+          }
+        }
+      },
+      "ShopkeeperIdRequest": {
+        "type": "object",
+        "required": ["shopkeeperId"],
+        "properties": {
+          "shopkeeperId": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateShopRequest": {
+        "type": "object",
+        "required": ["shopkeeperId", "shopName", "ownerName", "mobile"],
+        "properties": {
+          "shopkeeperId": {
+            "type": "string"
+          },
+          "shopName": {
+            "type": "string"
+          },
+          "ownerName": {
+            "type": "string"
+          },
+          "mobile": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "pincode": {
+            "type": "string"
+          },
+          "gst": {
+            "type": "string"
+          }
+        }
+      },
+      "AddCustomerToShopRequest": {
+        "type": "object",
+        "required": ["shopkeeperId", "name", "mobile"],
+        "properties": {
+          "shopkeeperId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mobile": {
+            "type": "string"
+          },
+          "customerEmail": {
+            "type": "string",
+            "format": "email"
+          },
+          "cashback": {
+            "type": "number"
+          },
+          "billAmount": {
+            "type": "number"
+          },
+          "issueCashback": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateCashbackRequest": {
+        "type": "object",
+        "required": ["mobile", "cashbackId"],
+        "properties": {
+          "mobile": {
+            "type": "string"
+          },
+          "cashbackId": {
+            "type": "string"
+          },
+          "billAmount": {
+            "type": "number"
+          },
+          "cashback": {
+            "type": "number"
+          },
+          "issueCashback": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AddCashbackRequest": {
+        "type": "object",
+        "required": ["shopkeeperId", "mobile", "billAmount", "cashback"],
+        "properties": {
+          "shopkeeperId": {
+            "type": "string"
+          },
+          "mobile": {
+            "type": "string"
+          },
+          "billAmount": {
+            "type": "number"
+          },
+          "cashback": {
+            "type": "number"
+          },
+          "issueCashback": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RedeemCashbackRequest": {
+        "type": "object",
+        "required": ["customerMobile", "cashbackId"],
+        "properties": {
+          "customerMobile": {
+            "type": "string"
+          },
+          "redeemAmount": {
+            "type": "number"
+          },
+          "cashbackId": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateRedeemStatusRequest": {
+        "type": "object",
+        "required": ["cashbackId", "action"],
+        "properties": {
+          "cashbackId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["APPROVED", "REJECTED"]
+          },
+          "redeemAmount": {
+            "type": "number"
+          }
+        }
+      },
+      "CustomerCashbackRequest": {
+        "type": "object",
+        "required": ["mobile"],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "mobile": {
+            "type": "string"
+          }
+        }
+      },
+      "SaveFcmTokenRequest": {
+        "type": "object",
+        "required": ["userId", "fcmToken"],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "fcmToken": {
+            "type": "string"
+          }
+        }
+      },
+      "SendPushNotificationRequest": {
+        "type": "object",
+        "required": ["userId", "title", "body"],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  }
+}
