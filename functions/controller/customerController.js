@@ -61,12 +61,18 @@ exports.getCustomerCashbackDetails = async (req, res) => {
             const { shopkeeperId, cashback, billAmount, date , redeemcashback,issueCashback, redeemStatus} = data;
  console.log("cashback data----->>>", data);    
             if (!shopMap[shopkeeperId]) {
-                // fetch shopkeeper profile once
-                const shopDoc = await db.collection("users").doc(shopkeeperId).get();
+                const shopSnap = await db.collection("shops")
+                    .where("shopkeeperId", "==", shopkeeperId)
+                    .limit(1)
+                    .get();
+
+                const shopData = !shopSnap.empty ? shopSnap.docs[0].data() : null;
+                const shopkeeperDoc = await db.collection("users").doc(shopkeeperId).get();
 
                 shopMap[shopkeeperId] = {
                     shopkeeperId,
-                    shopName: shopDoc.exists ? shopDoc.data().shopName || null : null,
+                    shopId: !shopSnap.empty ? shopSnap.docs[0].id : null,
+                    shopName: shopData?.shopName || shopkeeperDoc.data()?.shopName || shopkeeperDoc.data()?.name || "CashBack Partner",
                     totalCashback: 0,
                     cashbackHistory: []
                 };
@@ -77,6 +83,7 @@ exports.getCustomerCashbackDetails = async (req, res) => {
                 billAmount: billAmount || null,
                 cashback,
                 cashbackid,
+                shopName: shopMap[shopkeeperId].shopName,
                 date: date.toDate().toLocaleString("en-IN", {
                     timeZone: "Asia/Kolkata"
                 }).toString(),
