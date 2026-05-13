@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:5001",
+      "url": "http://72.62.195.21:5001",
       "description": "Local development server"
     }
   ],
