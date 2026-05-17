@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  BackHandler,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -37,6 +39,19 @@ export default function CustomerHomeScreen() {
   const [shops, setShops] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (activeTab !== "home") {
+        setActiveTab("home");
+        return true;
+      }
+
+      return false;
+    });
+
+    return () => subscription.remove();
+  }, [activeTab]);
 
   const loadData = useCallback(async () => {
     if (!user?.mobile && !user?.userId) return;
@@ -160,12 +175,25 @@ function ScanScreen({ refresh, isLoading, topInset, bottomInset }) {
     >
       <View style={[styles.simpleHero, { paddingTop: 24 + topInset }]}>
         <Text style={styles.simpleHeroTitle}>Scan & Earn</Text>
-        <Text style={styles.simpleHeroSub}>Show your mobile number or customer ID at the store.</Text>
+        <Text style={styles.simpleHeroSub}>Point at shop QR code to collect cashback</Text>
       </View>
-      <View style={styles.scanCard}>
-        <Text style={styles.scanIcon}>▣</Text>
-        <Text style={styles.scanTitle}>Customer QR Coming Soon</Text>
-        <Text style={styles.scanText}>For now, share your registered mobile number with the shopkeeper to receive cashback.</Text>
+      <View style={styles.qrFrame}>
+        <Text style={styles.qrIcon}>▣</Text>
+      </View>
+      <Text style={styles.scanTitle}>Scan Shop QR Code</Text>
+      <Text style={styles.scanText}>Position the QR inside the frame</Text>
+      <View style={styles.shopCodeCard}>
+        <Text style={styles.shopCodeLabel}>OR ENTER SHOP CODE</Text>
+        <View style={styles.shopCodeInput}>
+          <Text style={styles.shopCodeText}>A B C 1 2 3</Text>
+        </View>
+        <TouchableOpacity style={styles.enterCodeButton}>
+          <Text style={styles.enterCodeText}>Enter Shop Code</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.rateCard}>
+        <Text style={styles.rateLabel}>Current Rate</Text>
+        <Text style={styles.rateValue}>5% Cashback</Text>
       </View>
     </PullRefreshScrollView>
   );
@@ -231,15 +259,45 @@ function OffersScreen({ refresh, isLoading, bottomInset }) {
       onRefresh={refresh}
       refreshing={isLoading}
     >
-      <Text style={styles.offersTitle}>Offers for You</Text>
-      {offers.map(offer => <OfferCard key={offer.id} offer={offer} />)}
+      <View style={styles.offersHero}>
+        <Text style={styles.simpleHeroTitle}>My Offers</Text>
+        <Text style={styles.simpleHeroSub}>Exclusive deals from your favourite shops</Text>
+      </View>
+      {offers.slice(0, 3).map(offer => <OfferCard key={offer.id} offer={offer} />)}
     </PullRefreshScrollView>
   );
 }
 
 function ProfileScreen({ user, metrics, signOut, refresh, isLoading, topInset, bottomInset }) {
+  const [mode, setMode] = useState("profile");
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (mode === "edit") {
+        setMode("profile");
+        return true;
+      }
+
+      return false;
+    });
+
+    return () => subscription.remove();
+  }, [mode]);
+
+  if (mode === "edit") {
+    return (
+      <EditProfileScreen
+        bottomInset={bottomInset}
+        metrics={metrics}
+        onBack={() => setMode("profile")}
+        topInset={topInset}
+        user={user}
+      />
+    );
+  }
+
   const menu = [
-    { icon: "👤", label: "Edit Profile" },
+    { icon: "👤", label: "Edit Profile", onPress: () => setMode("edit") },
     { icon: "🔔", label: "Notifications" },
     { icon: "🔒", label: "Privacy & Security" },
     { icon: "☎", label: "Help & Support" },
@@ -272,7 +330,7 @@ function ProfileScreen({ user, metrics, signOut, refresh, isLoading, topInset, b
 
       <View style={styles.settingsList}>
         {menu.map(item => (
-          <TouchableOpacity key={item.label} style={styles.settingsRow}>
+          <TouchableOpacity key={item.label} onPress={item.onPress} style={styles.settingsRow}>
             <Text style={styles.settingsIcon}>{item.icon}</Text>
             <Text style={styles.settingsLabel}>{item.label}</Text>
             <Text style={styles.settingsArrow}>›</Text>
@@ -284,6 +342,141 @@ function ProfileScreen({ user, metrics, signOut, refresh, isLoading, topInset, b
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
     </PullRefreshScrollView>
+  );
+}
+
+function EditProfileScreen({ bottomInset, metrics, onBack, topInset, user }) {
+  const [cashbackAlerts, setCashbackAlerts] = useState(true);
+  const [offerNotifications, setOfferNotifications] = useState(true);
+  const [promotionalMessages, setPromotionalMessages] = useState(false);
+
+  return (
+    <PullRefreshScrollView
+      contentContainerStyle={[styles.editProfileScroll, { paddingBottom: 32 + bottomInset }]}
+      onRefresh={() => {}}
+      refreshing={false}
+    >
+      <View style={[styles.editHero, { paddingTop: 14 + topInset }]}>
+        <View style={styles.editTopBar}>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <Text style={styles.backButtonText}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.editTitle}>Edit Profile</Text>
+          <View style={styles.editTopSpacer} />
+        </View>
+        <View style={styles.editAvatarWrap}>
+          <Text style={styles.editAvatarIcon}>👤</Text>
+          <View style={styles.cameraDot} />
+        </View>
+        <Text style={styles.editName}>{user?.name || "Customer"}</Text>
+        <Text style={styles.editMemberPill}>Gold Member</Text>
+      </View>
+
+      <EditSection title="PERSONAL INFO">
+        <InfoRow label="FULL NAME" value={user?.name || "Customer"} />
+        <InfoRow label="DATE OF BIRTH" value="14 March 1995" />
+        <View style={styles.infoRow}>
+          <View style={styles.infoIcon} />
+          <View style={styles.infoContent}>
+            <Text style={styles.infoLabel}>GENDER</Text>
+            <View style={styles.genderRow}>
+              {["Female", "Male", "Other"].map((item, index) => (
+                <TouchableOpacity
+                  key={item}
+                  style={[styles.genderPill, index === 0 ? styles.genderPillActive : null]}
+                >
+                  <Text style={[styles.genderText, index === 0 ? styles.genderTextActive : null]}>{item}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </EditSection>
+
+      <EditSection title="CONTACT DETAILS">
+        <InfoRow label="PHONE NUMBER" value={`+91    ${user?.mobile || "98765 43210"}`} />
+        <InfoRow label="EMAIL ADDRESS" value={user?.email || "priya.sharma@gmail.com"} />
+        <InfoRow label="CITY" value="Mumbai" />
+      </EditSection>
+
+      <EditSection title="MEMBERSHIP">
+        <View style={styles.membershipRow}>
+          <View style={styles.memberIcon} />
+          <View style={styles.memberInfo}>
+            <Text style={styles.infoLabel}>CURRENT TIER</Text>
+            <Text style={styles.memberChip}>Gold Member</Text>
+          </View>
+          <Text style={styles.memberEarned}>{formatCurrency(metrics.totalEarned)} earned</Text>
+        </View>
+      </EditSection>
+
+      <EditSection title="NOTIFICATIONS">
+        <ToggleRow
+          enabled={cashbackAlerts}
+          label="Cashback alerts"
+          onChange={setCashbackAlerts}
+          subtitle="Get notified when cashback is credited"
+        />
+        <ToggleRow
+          enabled={offerNotifications}
+          label="Offer notifications"
+          onChange={setOfferNotifications}
+          subtitle="New deals from your favourite shops"
+        />
+        <ToggleRow
+          enabled={promotionalMessages}
+          label="Promotional messages"
+          onChange={setPromotionalMessages}
+          subtitle="Special campaigns and seasonal deals"
+        />
+      </EditSection>
+
+      <TouchableOpacity style={styles.saveChangesButton}>
+        <Text style={styles.saveChangesText}>Save changes</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.deleteAccountButton}>
+        <Text style={styles.deleteAccountText}>Delete account</Text>
+      </TouchableOpacity>
+    </PullRefreshScrollView>
+  );
+}
+
+function EditSection({ children, title }) {
+  return (
+    <View style={styles.editSection}>
+      <Text style={styles.editSectionTitle}>{title}</Text>
+      <View style={styles.editCard}>{children}</View>
+    </View>
+  );
+}
+
+function InfoRow({ label, value }) {
+  return (
+    <View style={styles.infoRow}>
+      <View style={styles.infoIcon} />
+      <View style={styles.infoContent}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
+function ToggleRow({ enabled, label, onChange, subtitle }) {
+  return (
+    <View style={styles.toggleRow}>
+      <View style={styles.infoIcon} />
+      <View style={styles.toggleTextWrap}>
+        <Text style={styles.toggleLabel}>{label}</Text>
+        <Text style={styles.toggleSubtitle}>{subtitle}</Text>
+      </View>
+      <Switch
+        onValueChange={onChange}
+        thumbColor="#ffffff"
+        trackColor={{ false: "#d7e7de", true: "#18733b" }}
+        value={enabled}
+      />
+    </View>
   );
 }
 
@@ -343,17 +536,15 @@ function OfferCard({ offer }) {
   return (
     <View style={styles.offerCard}>
       <View style={styles.offerIconBox}>
-        <Text style={styles.offerIcon}>{offer.icon}</Text>
+        <Text style={styles.offerPercent}>{offer.cashback}</Text>
       </View>
       <View style={styles.offerInfo}>
         <Text style={styles.offerShop}>{offer.shop}</Text>
-        <Text style={styles.categoryPill}>{offer.category}</Text>
-        <Text style={styles.offerMeta}>Min {offer.min} · Expires {offer.expiry}</Text>
+        <Text style={styles.offerMeta}>Min spend {offer.min} · Expires {offer.expiry}</Text>
       </View>
-      <View style={styles.offerCashback}>
-        <Text style={styles.offerPercent}>{offer.cashback}</Text>
-        <Text style={styles.cashbackText}>cashback</Text>
-      </View>
+      <TouchableOpacity style={styles.useOfferButton}>
+        <Text style={styles.useOfferText}>Use</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -790,30 +981,96 @@ const styles = StyleSheet.create({
     color: "#d4eadb",
     marginTop: 8,
   },
-  scanCard: {
-    margin: 16,
-    borderRadius: 16,
+  qrFrame: {
+    alignItems: "center",
+    alignSelf: "center",
+    borderColor: "#18733b",
+    borderRadius: 10,
+    borderWidth: 3,
+    height: 164,
+    justifyContent: "center",
+    marginTop: 22,
+    width: 164,
+  },
+  qrIcon: {
+    color: "#f8fbf9",
+    fontSize: 58,
+  },
+  shopCodeCard: {
+    marginHorizontal: 30,
+    marginTop: 18,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#cfe0d5",
     backgroundColor: "#ffffff",
-    padding: 24,
+    padding: 14,
     alignItems: "center",
-  },
-  scanIcon: {
-    fontSize: 60,
-    color: "#18733b",
-    marginBottom: 14,
   },
   scanTitle: {
     color: "#122018",
     fontSize: 18,
     fontWeight: "900",
-    marginBottom: 8,
+    marginTop: 18,
+    textAlign: "center",
   },
   scanText: {
     color: "#66766a",
     textAlign: "center",
     lineHeight: 22,
+  },
+  shopCodeLabel: {
+    color: "#66766a",
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+  shopCodeInput: {
+    alignItems: "center",
+    borderColor: "#cfe0d5",
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 52,
+    width: "100%",
+  },
+  shopCodeText: {
+    color: "#66766a",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  enterCodeButton: {
+    alignItems: "center",
+    backgroundColor: "#18733b",
+    borderRadius: 12,
+    justifyContent: "center",
+    minHeight: 48,
+    marginTop: 12,
+    width: "100%",
+  },
+  enterCodeText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  rateCard: {
+    alignItems: "center",
+    backgroundColor: "#e8f4ed",
+    borderRadius: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginHorizontal: 40,
+    marginTop: 18,
+    minHeight: 48,
+    paddingHorizontal: 18,
+  },
+  rateLabel: {
+    color: "#18733b",
+    fontWeight: "800",
+  },
+  rateValue: {
+    color: "#18733b",
+    fontSize: 18,
+    fontWeight: "900",
   },
   walletHero: {
     backgroundColor: "#18733b",
@@ -857,17 +1114,19 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   offersScreen: {
-    paddingTop: 18,
+    paddingTop: 0,
   },
-  offersTitle: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    color: "#122018",
-    fontSize: 20,
-    fontWeight: "900",
+  offersHero: {
+    backgroundColor: "#18733b",
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 54,
+    paddingBottom: 28,
+    marginBottom: 18,
   },
   offerCard: {
-    marginHorizontal: 14,
+    marginHorizontal: 22,
     marginBottom: 12,
     borderRadius: 14,
     borderWidth: 1,
@@ -878,16 +1137,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   offerIconBox: {
-    width: 52,
-    height: 52,
+    width: 60,
+    height: 60,
     borderRadius: 12,
     backgroundColor: "#e6f3ed",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 14,
-  },
-  offerIcon: {
-    fontSize: 30,
   },
   offerInfo: {
     flex: 1,
@@ -913,26 +1169,31 @@ const styles = StyleSheet.create({
     color: "#66766a",
     fontSize: 12,
   },
-  offerCashback: {
-    alignItems: "flex-end",
-  },
   offerPercent: {
     color: "#18733b",
-    fontSize: 22,
+    fontSize: 16,
     fontWeight: "900",
   },
-  cashbackText: {
-    color: "#66766a",
-    fontSize: 11,
-    marginTop: 4,
+  useOfferButton: {
+    alignItems: "center",
+    backgroundColor: "#18733b",
+    borderRadius: 9,
+    minHeight: 28,
+    justifyContent: "center",
+    paddingHorizontal: 15,
+  },
+  useOfferText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900",
   },
   profileHero: {
     backgroundColor: "#18733b",
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     alignItems: "center",
-    padding: 20,
-    paddingBottom: 34,
+    padding: 22,
+    paddingBottom: 40,
     marginBottom: 18,
   },
   profileAvatar: {
@@ -1007,6 +1268,239 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   signOutText: {
+    color: "#ef4444",
+    fontWeight: "900",
+  },
+  editProfileScroll: {
+    backgroundColor: "#fbfdfb",
+  },
+  editHero: {
+    alignItems: "center",
+    backgroundColor: "#18733b",
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    marginBottom: 12,
+  },
+  editTopBar: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    flexDirection: "row",
+    marginBottom: 18,
+  },
+  backButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: 9,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  backButtonText: {
+    color: "#ffffff",
+    fontSize: 28,
+    lineHeight: 30,
+  },
+  editTitle: {
+    color: "#ffffff",
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "900",
+    marginLeft: 12,
+  },
+  editTopSpacer: {
+    width: 34,
+  },
+  editAvatarWrap: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.22)",
+    borderColor: "rgba(255,255,255,0.45)",
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 76,
+    justifyContent: "center",
+    marginBottom: 10,
+    width: 76,
+  },
+  editAvatarIcon: {
+    fontSize: 39,
+  },
+  cameraDot: {
+    backgroundColor: "#ffb11a",
+    borderRadius: 10,
+    bottom: 5,
+    height: 20,
+    position: "absolute",
+    right: -6,
+    width: 20,
+  },
+  editName: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  editMemberPill: {
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderRadius: 10,
+    color: "#d4eadb",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 6,
+    overflow: "hidden",
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  editSection: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  editSectionTitle: {
+    color: "#38513f",
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 7,
+  },
+  editCard: {
+    backgroundColor: "#ffffff",
+    borderColor: "#cfe0d5",
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  infoRow: {
+    alignItems: "center",
+    borderBottomColor: "#d9e5de",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    minHeight: 56,
+    paddingHorizontal: 12,
+  },
+  infoIcon: {
+    backgroundColor: "#e8f4ed",
+    borderRadius: 8,
+    height: 32,
+    marginRight: 12,
+    width: 32,
+  },
+  infoContent: {
+    flex: 1,
+  },
+  infoLabel: {
+    color: "#38513f",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  infoValue: {
+    color: "#111827",
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  genderRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  genderPill: {
+    alignItems: "center",
+    borderColor: "#cfe0d5",
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 30,
+    justifyContent: "center",
+  },
+  genderPillActive: {
+    borderColor: "#18733b",
+    backgroundColor: "#e8f4ed",
+  },
+  genderText: {
+    color: "#38513f",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  genderTextActive: {
+    color: "#18733b",
+  },
+  membershipRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    minHeight: 58,
+    paddingHorizontal: 12,
+  },
+  memberIcon: {
+    backgroundColor: "#fff2cf",
+    borderRadius: 8,
+    height: 32,
+    marginRight: 12,
+    width: 32,
+  },
+  memberInfo: {
+    flex: 1,
+  },
+  memberChip: {
+    alignSelf: "flex-start",
+    backgroundColor: "#fff2cf",
+    borderRadius: 8,
+    color: "#c78300",
+    fontSize: 11,
+    fontWeight: "900",
+    marginTop: 3,
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  memberEarned: {
+    color: "#66766a",
+    fontSize: 11,
+  },
+  toggleRow: {
+    alignItems: "center",
+    borderBottomColor: "#d9e5de",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    minHeight: 62,
+    paddingHorizontal: 12,
+  },
+  toggleTextWrap: {
+    flex: 1,
+  },
+  toggleLabel: {
+    color: "#111827",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  toggleSubtitle: {
+    color: "#66766a",
+    fontSize: 10,
+    marginTop: 2,
+  },
+  saveChangesButton: {
+    alignItems: "center",
+    backgroundColor: "#18733b",
+    borderRadius: 10,
+    justifyContent: "center",
+    marginHorizontal: 16,
+    minHeight: 50,
+    marginTop: 4,
+  },
+  saveChangesText: {
+    color: "#ffffff",
+    fontWeight: "900",
+  },
+  deleteAccountButton: {
+    alignItems: "center",
+    backgroundColor: "#fff1f1",
+    borderColor: "#ef4444",
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: "center",
+    marginHorizontal: 16,
+    minHeight: 48,
+    marginTop: 10,
+  },
+  deleteAccountText: {
     color: "#ef4444",
     fontWeight: "900",
   },

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  BackHandler,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,7 +24,7 @@ import { useAuth } from "../../context/AuthContext";
 import AppButton from "../../ui/AppButton";
 import PullRefreshScrollView from "../../ui/PullRefreshScrollView";
 import TabTransition from "../../ui/TabTransition";
-import { isValidMobile, normalizeMobile } from "../../utils/validation";
+import { normalizeMobile } from "../../utils/validation";
 
 const tabs = [
   { key: "dashboard", label: "Dashboard", icon: "▦" },
@@ -47,6 +48,19 @@ export default function ShopkeeperHomeScreen() {
   const [customers, setCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (activeTab !== "dashboard") {
+        setActiveTab("dashboard");
+        return true;
+      }
+
+      return false;
+    });
+
+    return () => subscription.remove();
+  }, [activeTab]);
 
   const shopkeeperId = user?.userId;
   const primaryShop = shops[0];
@@ -170,30 +184,73 @@ function DashboardScreen({ user, primaryShop, metrics, isLoading, refresh, setAc
 function IssueCashbackScreen({ shopkeeperId, refresh, isLoading, topInset, bottomInset }) {
   const [mobile, setMobile] = useState("");
   const [customer, setCustomer] = useState(null);
+  const [customerMatches, setCustomerMatches] = useState([]);
   const [billAmount, setBillAmount] = useState("");
   const [cashback, setCashback] = useState("");
   const [message, setMessage] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isIssuing, setIsIssuing] = useState(false);
 
-  const findCustomer = async () => {
-    if (!isValidMobile(mobile)) {
-      setMessage("Enter valid 10-digit mobile number");
+  const findCustomer = async (query = mobile, { showValidation = true } = {}) => {
+    const normalizedQuery = normalizeMobile(query);
+
+    if (normalizedQuery.length < 3) {
+      setCustomerMatches([]);
+      setCustomer(null);
+      if (showValidation) {
+        setMessage("Enter at least 3 digits to search customers");
+      }
       return;
     }
 
     setMessage("");
-    setCustomer(null);
     setIsSearching(true);
 
     try {
-      const response = await getCustomerByMobileNo(mobile);
-      setCustomer(response.data?.customer || null);
+      const response = await getCustomerByMobileNo(normalizedQuery);
+      const matches = response.data?.customers || [];
+      setCustomerMatches(matches);
+
+      if (matches.length === 1 && matches[0].mobile === normalizedQuery) {
+        setCustomer(matches[0]);
+      } else if (!matches.some(item => item.id === customer?.id)) {
+        setCustomer(null);
+      }
+
+      if (!matches.length) {
+        setMessage("No customer found");
+      }
     } catch (apiError) {
+      setCustomerMatches([]);
+      setCustomer(null);
       setMessage(apiError.friendlyMessage || "Customer not found");
     } finally {
       setIsSearching(false);
     }
+  };
+
+  useEffect(() => {
+    const query = mobile;
+
+    if (query.length < 3) {
+      setCustomerMatches([]);
+      setCustomer(null);
+      setMessage("");
+      return undefined;
+    }
+
+    const timerId = setTimeout(() => {
+      findCustomer(query, { showValidation: false });
+    }, 350);
+
+    return () => clearTimeout(timerId);
+  }, [mobile]);
+
+  const selectCustomer = nextCustomer => {
+    setCustomer(nextCustomer);
+    setMobile(normalizeMobile(nextCustomer.mobile || ""));
+    setCustomerMatches([]);
+    setMessage("");
   };
 
   const issueCashback = async () => {
@@ -216,7 +273,7 @@ function IssueCashbackScreen({ shopkeeperId, refresh, isLoading, topInset, botto
     try {
       const payload = {
         shopkeeperId,
-        mobile,
+        mobile: customer.mobile || mobile,
         billAmount: bill,
         cashback: cb,
         issueCashback: true,
@@ -267,22 +324,32 @@ function IssueCashbackScreen({ shopkeeperId, refresh, isLoading, topInset, botto
             setMessage("");
             setCustomer(null);
           }}
-          onSubmitEditing={findCustomer}
-          placeholder="Enter mobile number"
+          onSubmitEditing={() => findCustomer()}
+          placeholder="Start typing customer mobile"
           placeholderTextColor="#94a3b8"
           style={styles.phoneSearchInput}
           value={mobile}
         />
       </View>
-
-      <AppButton
-        disabled={!isValidMobile(mobile)}
-        loading={isSearching}
-        onPress={findCustomer}
-        title="Find Customer"
-      />
+      {isSearching ? <Text style={styles.searchingText}>Searching customers...</Text> : null}
 
       {message ? <Text style={styles.inlineError}>{message}</Text> : null}
+
+      {customerMatches.length > 0 && !customer ? (
+        <View style={styles.customerMatchesPanel}>
+          <Text style={styles.stepLabel}>GLOBAL CUSTOMER MATCHES</Text>
+          {customerMatches.map(item => (
+            <TouchableOpacity key={item.id} onPress={() => selectCustomer(item)} style={styles.customerMatchRow}>
+              <Avatar name={item.name} />
+              <View style={styles.customerCardInfo}>
+                <Text style={styles.customerName}>{item.name}</Text>
+                <Text style={styles.customerMeta}>+91 {item.mobile}</Text>
+              </View>
+              <Text style={styles.settingsArrow}>›</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
 
       {customer ? (
         <View style={styles.issuePanel}>
@@ -1247,6 +1314,29 @@ const styles = StyleSheet.create({
     color: "#dc2626",
     textAlign: "center",
     marginTop: 12,
+  },
+  searchingText: {
+    color: "#18733b",
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 8,
+    marginHorizontal: 18,
+  },
+  customerMatchesPanel: {
+    marginHorizontal: 18,
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  customerMatchRow: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderColor: "#cfe0d5",
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    marginBottom: 8,
+    minHeight: 62,
+    paddingHorizontal: 12,
   },
   searchHint: {
     alignItems: "center",

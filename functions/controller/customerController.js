@@ -117,26 +117,83 @@ exports.getCustomerByMobileNo = async (req, res) => {
         if (!mobile) {
             return res.status(400).json({ message: "Mobile number is required" });
         }
-        const snapshot = await db.collection("users")
-            .where("mobile", "==", mobile)
-            .where("profile", "==", "customer")
-            .limit(1)
-            .get();
-        //   const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        const customer = {
-            id: snapshot.docs[0]?.id,
-            ...snapshot.docs[0]?.data()
+        const normalizedMobile = String(mobile).replace(/\D/g, "");
+
+        if (normalizedMobile.length < 3) {
+            return res.status(200).json({
+                message: "Enter at least 3 digits to search customers",
+                customer: null,
+                customers: []
+            });
+        }
+
+        const normalizeDigits = value => String(value || "").replace(/\D/g, "");
+        const customerById = new Map();
+
+        const addCustomerDocs = snapshot => {
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+
+                if (data.profile === "customer") {
+                    customerById.set(doc.id, {
+                        id: doc.id,
+                        ...data
+                    });
+                }
+            });
         };
 
-        if (snapshot.empty) {
+        const exactStringSnap = await db.collection("users")
+            .where("mobile", "==", normalizedMobile)
+            .where("profile", "==", "customer")
+            .limit(10)
+            .get();
+
+        addCustomerDocs(exactStringSnap);
+
+        const exactNumber = Number(normalizedMobile);
+        if (!Number.isNaN(exactNumber)) {
+            const exactNumberSnap = await db.collection("users")
+                .where("mobile", "==", exactNumber)
+                .where("profile", "==", "customer")
+                .limit(10)
+                .get();
+
+            addCustomerDocs(exactNumberSnap);
+        }
+
+        if (!customerById.size) {
+            const snapshot = await db.collection("users")
+            .where("profile", "==", "customer")
+                .limit(500)
+            .get();
+
+            addCustomerDocs(snapshot);
+        }
+
+        const customers = Array.from(customerById.values())
+            .filter(customer => {
+                const customerMobile = normalizeDigits(customer.mobile);
+                return customerMobile === normalizedMobile
+                    || customerMobile.startsWith(normalizedMobile)
+                    || customerMobile.endsWith(normalizedMobile);
+            })
+            .slice(0, 10);
+
+        if (!customers.length) {
             return res.status(404).json({ 
                 errorCode: 1,
-                message: "Customer not found" });
+                message: "Customer not found",
+                customer: null,
+                customers: []
+            });
         }
+
         res.status(200).json({
-            message: "Customer fetched successfully",
-            customer
+            message: "Customers fetched successfully",
+            customer: customers[0] || null,
+            customers
         });
     } catch (err) {
         console.error(err);
