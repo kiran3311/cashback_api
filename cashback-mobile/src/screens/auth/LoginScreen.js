@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { loginUser } from "../../api/authApi";
-import { useAuth } from "../../context/AuthContext";
+import { sendOtp } from "../../api/otpApi";
 import AppButton from "../../ui/AppButton";
 import { isValidMobile, normalizeMobile } from "../../utils/validation";
 
@@ -20,7 +20,6 @@ const roles = [
 ];
 
 export default function LoginScreen({ navigation }) {
-  const { signIn } = useAuth();
   const [profile, setProfile] = useState("customer");
   const [mobile, setMobile] = useState("");
   const [error, setError] = useState("");
@@ -49,7 +48,17 @@ export default function LoginScreen({ navigation }) {
         return;
       }
 
-      await signIn(loginData.user);
+      try {
+        await sendOtp(mobile);
+      } catch (otpError) {
+        console.log("[OTP] Send failed, test bypass remains available:", otpError.friendlyMessage || otpError.message);
+      }
+
+      navigation.navigate("OtpVerification", {
+        mobile,
+        mode: "login",
+        user: loginData.user,
+      });
     } catch (apiError) {
       setError(apiError.friendlyMessage || "Login failed. Please try again.");
     } finally {

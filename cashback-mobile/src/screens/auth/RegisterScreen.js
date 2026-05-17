@@ -9,8 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { registerUser } from "../../api/authApi";
-import { useAuth } from "../../context/AuthContext";
+import { sendOtp } from "../../api/otpApi";
 import AppButton from "../../ui/AppButton";
 import { isValidEmail, isValidMobile, normalizeMobile } from "../../utils/validation";
 
@@ -20,7 +19,6 @@ const roles = [
 ];
 
 export default function RegisterScreen({ navigation }) {
-  const { signIn } = useAuth();
   const [profile, setProfile] = useState("customer");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -61,17 +59,16 @@ export default function RegisterScreen({ navigation }) {
         profile,
       };
 
-      const registerResponse = await registerUser(payload);
-      const registerData = registerResponse.data;
-
-      if (!registerData.success) {
-        setError(registerData.message || "Registration failed");
-        return;
+      try {
+        await sendOtp(mobile);
+      } catch (otpError) {
+        console.log("[OTP] Send failed, test bypass remains available:", otpError.friendlyMessage || otpError.message);
       }
 
-      await signIn({
-        userId: registerData.userId,
-        ...payload,
+      navigation.navigate("OtpVerification", {
+        mobile,
+        mode: "register",
+        payload,
       });
     } catch (apiError) {
       setError(apiError.friendlyMessage || "Registration failed. Please try again.");
