@@ -115,7 +115,7 @@ exports.getCustomerByMobileNo = async (req, res) => {
     try {
         const { mobile } = req.body;
         if (!mobile) {
-            return res.status(400).json({ message: "Mobile number is required" });
+            return res.status(200).json({ message: "Mobile number is required" });
         }
 
         const normalizedMobile = String(mobile).replace(/\D/g, "");
@@ -182,7 +182,7 @@ exports.getCustomerByMobileNo = async (req, res) => {
             .slice(0, 10);
 
         if (!customers.length) {
-            return res.status(404).json({ 
+            return res.status(200).json({ 
                 errorCode: 1,
                 message: "Customer not found",
                 customer: null,
