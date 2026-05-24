@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { io } from "socket.io-client";
 import { getCustomerCashbackList, updateRedeemStatus } from "../../api/customerApi";
 import { useAuth } from "../../context/AuthContext";
 import PullRefreshScrollView from "../../ui/PullRefreshScrollView";
@@ -79,6 +80,121 @@ export default function CustomerHomeScreen() {
 
   const metrics = useMemo(() => buildCustomerMetrics(shops), [shops]);
 
+  const respondToRedeemRequest = useCallback(async ({ cashbackId, redeemAmount, action }) => {
+    if (!cashbackId) return;
+
+    try {
+      await updateRedeemStatus({
+        cashbackId,
+        action,
+        redeemAmount,
+      });
+      Alert.alert(
+        action === "APPROVED" ? "Cashback approved" : "Cashback rejected",
+        action === "APPROVED" ? "Redeem request approved." : "Redeem request rejected."
+      );
+      loadData();
+    } catch (apiError) {
+      Alert.alert("Unable to update", apiError.friendlyMessage || "Please try again.");
+    }
+  }, [loadData]);
+
+  const [shownRedeemRequests, setShownRedeemRequests] = useState([]);
+
+  const showRedeemRequestPopup = useCallback(data => {
+    if (!data) return;
+
+    const type = data.type || "REDEEM_REQUEST";
+    const cashbackId = data.cashbackId || data.notificationId;
+    const redeemAmount = Number(data.redeemAmount) || 0;
+
+    if (type === "REDEEM_REQUEST") {
+      if (!cashbackId || shownRedeemRequests.includes(cashbackId)) return;
+      setShownRedeemRequests(prev => [...prev, cashbackId]);
+
+      Alert.alert(
+        "Redeem cashback request",
+        `Approve redeem request of ${formatCurrency(redeemAmount)}?`,
+        [
+          {
+            text: "Reject",
+            style: "destructive",
+            onPress: () => respondToRedeemRequest({
+              cashbackId,
+              redeemAmount,
+              action: "REJECTED",
+            }),
+          },
+          {
+            text: "Approve",
+            onPress: () => respondToRedeemRequest({
+              cashbackId,
+              redeemAmount,
+              action: "APPROVED",
+            }),
+          },
+        ]
+      );
+    } else if (type === "REDEEM_STATUS") {
+      const approved = data.action === "APPROVED";
+      Alert.alert(
+        approved ? "Redeem request approved" : "Redeem request rejected",
+        approved
+          ? `Your cashback redeem request of ${formatCurrency(redeemAmount)} has been approved.`
+          : "Your cashback redeem request was rejected."
+      );
+    }
+  }, [respondToRedeemRequest, shownRedeemRequests]);
+
+  useEffect(() => {
+    if (!user?.userId) return;
+
+    const socket = io("http://72.62.195.21:8000", {
+      transports: ["websocket"],
+    });
+
+    socket.on("connect", () => {
+      socket.emit("register", user.userId);
+    });
+
+    socket.on("notification", payload => {
+      showRedeemRequestPopup({
+        type: payload.type || "REDEEM_REQUEST",
+        cashbackId: payload.notificationId,
+        redeemAmount: payload.redeemAmount,
+        billAmount: payload.billAmount,
+        message: payload.message,
+      });
+    });
+
+    socket.on("disconnect", () => {
+      console.log("Socket disconnected");
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user?.userId, showRedeemRequestPopup]);
+
+  const [seenPendingIds, setSeenPendingIds] = useState([]);
+
+  useEffect(() => {
+    const pendingRequests = metrics.transactions.filter(
+      txn => txn.status === "PENDING" && txn.pendingRedeemAmount > 0
+    );
+
+    const newRequest = pendingRequests.find(txn => !seenPendingIds.includes(txn.id));
+    if (newRequest) {
+      setSeenPendingIds(prev => [...prev, newRequest.id]);
+      showRedeemRequestPopup({
+        type: "REDEEM_REQUEST",
+        cashbackId: newRequest.id,
+        redeemAmount: newRequest.pendingRedeemAmount || newRequest.cashback,
+        billAmount: newRequest.billAmount,
+      });
+    }
+  }, [metrics.transactions, showRedeemRequestPopup]);
+
   const screenProps = {
     user,
     shops,
@@ -101,6 +217,7 @@ export default function CustomerHomeScreen() {
           {activeTab === "wallet" ? <WalletScreen {...screenProps} /> : null}
           {activeTab === "offers" ? <OffersScreen {...screenProps} /> : null}
           {activeTab === "profile" ? <ProfileScreen {...screenProps} /> : null}
+          {activeTab === "notifications" ? <NotificationsScreen {...screenProps} /> : null}
         </TabTransition>
       </View>
       <BottomTabs activeTab={activeTab} bottomInset={insets.bottom} onChange={setActiveTab} />
@@ -121,9 +238,9 @@ function HomeScreen({ user, metrics, isLoading, error, refresh, setActiveTab, to
             <Text style={styles.heroKicker}>{getGreeting()},</Text>
             <Text style={styles.heroName}>{user?.name || "Customer"} 👋</Text>
           </View>
-          <TouchableOpacity style={styles.bellButton}>
+          <TouchableOpacity onPress={() => setActiveTab("notifications")} style={styles.bellButton}>
             <Text style={styles.bellIcon}>🔔</Text>
-            <View style={styles.notificationDot} />
+            {metrics.notifications.length ? <View style={styles.notificationDot} /> : null}
           </TouchableOpacity>
         </View>
 
@@ -209,7 +326,7 @@ function WalletScreen({ metrics, isLoading, refresh, topInset, bottomInset }) {
       await updateRedeemStatus({
         cashbackId: txn.id,
         action,
-        redeemAmount: txn.cashback,
+        redeemAmount: txn.pendingRedeemAmount || txn.cashback,
       });
       Alert.alert("Redeem updated", `Redeem request ${action.toLowerCase()}.`);
       refresh();
@@ -268,7 +385,24 @@ function OffersScreen({ refresh, isLoading, bottomInset }) {
   );
 }
 
-function ProfileScreen({ user, metrics, signOut, refresh, isLoading, topInset, bottomInset }) {
+function NotificationsScreen({ metrics, refresh, isLoading, topInset, bottomInset }) {
+  return (
+    <PullRefreshScrollView
+      contentContainerStyle={[styles.scrollWithTabs, { paddingBottom: 92 + bottomInset }]}
+      onRefresh={refresh}
+      refreshing={isLoading}
+    >
+      <View style={[styles.simpleHero, { paddingTop: 24 + topInset }]}>
+        <Text style={styles.simpleHeroTitle}>Notifications</Text>
+        <Text style={styles.simpleHeroSub}>Redeem approvals and cashback updates</Text>
+      </View>
+      {metrics.notifications.map(item => <NotificationRow item={item} key={item.id} />)}
+      {!metrics.notifications.length ? <EmptyState title="No notifications" subtitle="Redeem requests and status updates will appear here." /> : null}
+    </PullRefreshScrollView>
+  );
+}
+
+function ProfileScreen({ user, metrics, signOut, refresh, isLoading, setActiveTab, topInset, bottomInset }) {
   const [mode, setMode] = useState("profile");
 
   useEffect(() => {
@@ -298,7 +432,7 @@ function ProfileScreen({ user, metrics, signOut, refresh, isLoading, topInset, b
 
   const menu = [
     { icon: "👤", label: "Edit Profile", onPress: () => setMode("edit") },
-    { icon: "🔔", label: "Notifications" },
+    { icon: "🔔", label: "Notifications", onPress: () => setActiveTab("notifications") },
     { icon: "🔒", label: "Privacy & Security" },
     { icon: "☎", label: "Help & Support" },
     { icon: "⭐", label: "Rate the App" },
@@ -549,25 +683,68 @@ function OfferCard({ offer }) {
   );
 }
 
-function ActivityRow({ txn, onRespond, updating }) {
-  const redeemed = txn.status === "APPROVED" || txn.redeemcashback;
-  const canRespond = onRespond && txn.status === "PENDING" && !txn.redeemcashback && txn.cashback > 0;
+function NotificationRow({ item }) {
+  const isApproved = item.status === "APPROVED";
+  const isRejected = item.status === "REJECTED";
 
   return (
     <View style={styles.activityCard}>
       <View style={styles.activityRow}>
-        <View style={[styles.activityIcon, redeemed ? styles.activityRedeemIcon : null]}>
-          <Text style={styles.activityArrow}>{redeemed ? "↓" : "↑"}</Text>
+        <View style={[
+          styles.activityIcon,
+          isApproved ? styles.activityApprovedIcon : null,
+          isRejected ? styles.activityRejectedIcon : null,
+        ]}>
+          <Text style={styles.activityArrow}>{isRejected ? "×" : "✓"}</Text>
+        </View>
+        <View style={styles.activityMiddle}>
+          <Text style={styles.activityShop}>{item.title}</Text>
+          <Text style={styles.activityMeta}>{item.timeLabel}</Text>
+          <Text style={styles.activityBill}>Bill {formatCurrency(item.billAmount)}</Text>
+        </View>
+        <Text style={[
+          styles.activityCashback,
+          isApproved ? styles.approvedText : null,
+          isRejected ? styles.rejectedText : null,
+        ]}>
+          {formatCurrency(item.amount)}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function ActivityRow({ txn, onRespond, updating }) {
+  const isApproved = txn.status === "APPROVED" || txn.redeemcashback;
+  const isRejected = txn.status === "REJECTED";
+  const displayCashback = isApproved ? (txn.redeemedAmount || txn.issuedCashback || txn.pendingRedeemAmount || txn.cashback) : (txn.pendingRedeemAmount || txn.cashback);
+  const canRespond = onRespond && txn.status === "PENDING" && !txn.redeemcashback && txn.pendingRedeemAmount > 0;
+
+  return (
+    <View style={styles.activityCard}>
+      <View style={styles.activityRow}>
+        <View style={[
+          styles.activityIcon,
+          isApproved ? styles.activityApprovedIcon : null,
+          isRejected ? styles.activityRejectedIcon : null,
+        ]}>
+          <Text style={styles.activityArrow}>{isRejected ? "×" : isApproved ? "✓" : "↑"}</Text>
         </View>
         <View style={styles.activityMiddle}>
           <Text style={styles.activityShop}>{txn.shopName}</Text>
           <Text style={styles.activityMeta}>{txn.timeLabel}</Text>
         </View>
         <View style={styles.activityRight}>
-          <Text style={[styles.activityCashback, redeemed ? styles.redeemedText : null]}>
-            {redeemed ? "-" : "+"}{formatCurrency(txn.cashback)}
+          <Text style={[
+            styles.activityCashback,
+            isApproved ? styles.approvedText : null,
+            isRejected ? styles.rejectedText : null,
+          ]}>
+            {formatCurrency(displayCashback)}
           </Text>
           <Text style={styles.activityBill}>{formatCurrency(txn.billAmount)} spent</Text>
+          {txn.issuedAt ? <Text style={styles.activityMeta}>Issued at {txn.issuedAt}</Text> : null}
+          {txn.redeemedAt ? <Text style={styles.activityMeta}>Redeemed at {txn.redeemedAt}</Text> : null}
         </View>
       </View>
       {canRespond ? (
@@ -616,29 +793,56 @@ function EmptyState({ title, subtitle }) {
 
 function buildCustomerMetrics(shops) {
   const transactions = shops.flatMap(shop =>
-    (shop.cashbackHistory || []).map((history, index) => ({
-      id: history.cashbackId || history.cashbackid || `${shop.shopkeeperId}-${index}`,
-      shopName: history.shopName || shop.shopName || "CashBack Partner",
-      cashback: Number(history.cashback) || 0,
-      billAmount: Number(history.billAmount) || 0,
-      status: history.redeemStatus || (history.redeemcashback ? "APPROVED" : "PENDING"),
-      redeemcashback: Boolean(history.redeemcashback),
-      rawDate: history.date,
-      timeLabel: formatActivityDate(history.date),
-    }))
+    (shop.cashbackHistory || []).map((history, index) => {
+      const status = history.redeemStatus || (history.redeemcashback ? "APPROVED" : "PENDING");
+      const activityDate = status === "APPROVED" ? (history.redeemedAt || history.date) : history.date;
+      const redeemedAmount = Number(history.redeemedAmount)
+        || (status === "APPROVED" ? Number(history.issuedCashback) || Number(history.pendingRedeemAmount) || Number(history.cashback) || 0 : 0);
+
+      return {
+        id: history.cashbackId || history.cashbackid || `${shop.shopkeeperId}-${index}`,
+        shopName: history.shopName || shop.shopName || "CashBack Partner",
+        cashback: Number(history.cashback) || 0,
+        issuedCashback: Number(history.issuedCashback) || Number(history.cashback) || redeemedAmount,
+        redeemedAmount,
+        pendingRedeemAmount: Number(history.pendingRedeemAmount) || 0,
+        billAmount: Number(history.billAmount) || 0,
+        status,
+        redeemcashback: Boolean(history.redeemcashback),
+        rawDate: activityDate,
+        issuedAt: history.date,
+        redeemedAt: history.redeemedAt,
+        timeLabel: formatActivityDate(activityDate),
+      };
+    })
   );
 
   const sortedTransactions = transactions.sort((a, b) => parseMaybeDate(b.rawDate) - parseMaybeDate(a.rawDate));
-  const totalEarned = sortedTransactions.reduce((sum, txn) => sum + txn.cashback, 0);
+  const totalEarned = sortedTransactions.reduce((sum, txn) => sum + txn.issuedCashback, 0);
   const redeemed = sortedTransactions
     .filter(txn => txn.status === "APPROVED" || txn.redeemcashback)
-    .reduce((sum, txn) => sum + txn.cashback, 0);
+    .reduce((sum, txn) => sum + txn.redeemedAmount, 0);
+  const notifications = sortedTransactions
+    .filter(txn => txn.pendingRedeemAmount > 0 || txn.status === "APPROVED" || txn.status === "REJECTED")
+    .map(txn => ({
+      id: `notification-${txn.id}`,
+      title: txn.status === "APPROVED"
+        ? "Cashback redeem approved"
+        : txn.status === "REJECTED"
+          ? "Cashback redeem rejected"
+          : "Redeem cashback request",
+      status: txn.status,
+      amount: txn.status === "APPROVED" ? txn.redeemedAmount : (txn.pendingRedeemAmount || txn.cashback),
+      billAmount: txn.billAmount,
+      timeLabel: txn.timeLabel,
+    }));
 
   return {
     transactions: sortedTransactions,
+    notifications,
     totalEarned,
     redeemed,
-    availableBalance: Math.max(totalEarned - redeemed, 0),
+    availableBalance: sortedTransactions.reduce((sum, txn) => sum + txn.cashback, 0),
   };
 }
 
@@ -902,6 +1106,12 @@ const styles = StyleSheet.create({
   activityRedeemIcon: {
     backgroundColor: "#fdeceb",
   },
+  activityApprovedIcon: {
+    backgroundColor: "#dcfce7",
+  },
+  activityRejectedIcon: {
+    backgroundColor: "#fee2e2",
+  },
   activityArrow: {
     color: "#122018",
     fontSize: 20,
@@ -928,6 +1138,12 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   redeemedText: {
+    color: "#dc2626",
+  },
+  approvedText: {
+    color: "#18733b",
+  },
+  rejectedText: {
     color: "#dc2626",
   },
   activityBill: {

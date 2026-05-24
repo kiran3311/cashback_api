@@ -37,7 +37,7 @@ const tabs = [
 const statusColors = {
   PENDING: { bg: "#e6f2dc", text: "#206b1c", label: "Cashback Issued" },
   APPROVED: { bg: "#e7f6ed", text: "#18733b", label: "Redeemed" },
-  REJECTED: { bg: "#fff2d7", text: "#8a5a00", label: "Rejected" },
+  REJECTED: { bg: "#fee2e2", text: "#dc2626", label: "Rejected" },
 };
 
 export default function ShopkeeperHomeScreen() {
@@ -435,7 +435,7 @@ function TransactionsScreen({ metrics, customers, isLoading, refresh, topInset, 
       await redeemCashback({
         customerMobile: txn.mobile,
         cashbackId: txn.id,
-        redeemAmount,
+        redeemAmount: redeemAmount || txn.cashback,
       });
       Alert.alert("Redeem requested", "Customer has been notified for approval.");
       refresh();
@@ -446,12 +446,15 @@ function TransactionsScreen({ metrics, customers, isLoading, refresh, topInset, 
     }
   };
 
-  const filteredTxns = metrics.transactions.filter(txn => {
-    const statusMatch = filter === "All"
-      || (filter === "Issued" && txn.status !== "APPROVED")
-      || (filter === "Redeemed" && txn.status === "APPROVED");
-    return statusMatch;
-  });
+  const filteredTxns = metrics.transactions
+    .filter(txn => {
+      const statusMatch = filter === "All"
+        || (filter === "Issued" && txn.status !== "APPROVED")
+        || (filter === "Redeemed" && txn.status === "APPROVED");
+      return statusMatch;
+    })
+    .slice()
+    .sort((a, b) => parseMaybeDate(b.rawDate) - parseMaybeDate(a.rawDate));
 
   const filteredCustomers = customers.filter(customer => {
     const query = search.trim().toLowerCase();
@@ -767,6 +770,8 @@ function SectionHeader({ title }) {
 
 function TransactionRow({ txn }) {
   const status = statusColors[txn.status] || statusColors.PENDING;
+  const cashbackAmount = txn.status === "APPROVED" ? txn.redeemedAmount : txn.cashback;
+
   return (
     <View style={styles.txnRow}>
       <Avatar name={txn.customerName} />
@@ -777,7 +782,7 @@ function TransactionRow({ txn }) {
       <View style={styles.txnRight}>
         <Text style={styles.txnAmount}>{formatCurrency(txn.billAmount)}</Text>
         <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
-          <Text style={[styles.statusText, { color: status.text }]}>+{formatCurrency(txn.cashback)}</Text>
+          <Text style={[styles.statusText, { color: status.text }]}>+{formatCurrency(cashbackAmount)}</Text>
         </View>
       </View>
     </View>
@@ -786,10 +791,10 @@ function TransactionRow({ txn }) {
 
 function HistoryCard({ busy, onRedeem, onUpdate, txn }) {
   const status = statusColors[txn.status] || statusColors.PENDING;
+  const displayCashback = txn.status === "APPROVED" ? txn.redeemedAmount : txn.cashback;
   const [isEditing, setIsEditing] = useState(false);
   const [billAmount, setBillAmount] = useState(String(txn.billAmount || ""));
   const [cashback, setCashback] = useState(String(txn.cashback || ""));
-  const [redeemAmount, setRedeemAmount] = useState(String(txn.cashback || ""));
 
   const submitUpdate = () => {
     const bill = Number(billAmount);
@@ -805,15 +810,25 @@ function HistoryCard({ busy, onRedeem, onUpdate, txn }) {
   };
 
   const submitRedeem = () => {
-    const amount = Number(redeemAmount);
+    const amount = Number(txn.cashback);
 
-    if (!amount || amount <= 0 || amount > txn.cashback) {
-      Alert.alert("Invalid redeem amount", "Enter an amount within available cashback.");
+    if (!amount || amount <= 0) {
+      Alert.alert("No cashback available", "This transaction has no cashback left to redeem.");
       return;
     }
 
     onRedeem({ txn, redeemAmount: amount });
   };
+
+const isRedeemPending = txn.status === "PENDING" && txn.pendingRedeemAmount > 0;
+  const isRedeemed = txn.status === "APPROVED";
+  const redeemButtonLabel = busy
+    ? "Sending..."
+    : isRedeemed
+      ? "Redeemed"
+      : isRedeemPending
+        ? "Requested"
+        : "Redeem";
 
   return (
     <View style={styles.historyCardShell}>
@@ -822,13 +837,15 @@ function HistoryCard({ busy, onRedeem, onUpdate, txn }) {
         <View style={styles.historyMiddle}>
           <Text style={styles.customerName}>{txn.customerName}</Text>
           <Text style={styles.customerMeta}>{txn.timeLabel}</Text>
-          <View style={[styles.historyStatus, { backgroundColor: status.bg }]}>
+          <View style={[styles.historyStatus, { backgroundColor: status.bg }]}> 
             <Text style={[styles.historyStatusText, { color: status.text }]}>{status.label}</Text>
           </View>
         </View>
         <View style={styles.txnRight}>
-          <Text style={styles.historyCashback}>{formatCurrency(txn.cashback)}</Text>
+          <Text style={styles.historyCashback}>{formatCurrency(displayCashback)}</Text>
           <Text style={styles.customerMeta}>Bill {formatCurrency(txn.billAmount)}</Text>
+          {txn.issuedAt ? <Text style={styles.customerMeta}>Issued at {txn.issuedAt}</Text> : null}
+          {txn.redeemedAt ? <Text style={styles.customerMeta}>Redeemed at {txn.redeemedAt}</Text> : null}
         </View>
       </View>
       {isEditing ? (
@@ -858,16 +875,8 @@ function HistoryCard({ busy, onRedeem, onUpdate, txn }) {
         <TouchableOpacity onPress={() => setIsEditing(value => !value)} style={styles.smallActionButton}>
           <Text style={styles.smallActionText}>{isEditing ? "Cancel" : "Update"}</Text>
         </TouchableOpacity>
-        <TextInput
-          keyboardType="decimal-pad"
-          onChangeText={setRedeemAmount}
-          placeholder="Redeem"
-          placeholderTextColor="#94a3b8"
-          style={styles.redeemInput}
-          value={redeemAmount}
-        />
-        <TouchableOpacity disabled={busy || txn.status === "APPROVED"} onPress={submitRedeem} style={[styles.smallActionButton, styles.redeemActionButton]}>
-          <Text style={styles.smallActionLightText}>{busy ? "Sending..." : "Redeem"}</Text>
+        <TouchableOpacity disabled={busy || isRedeemed || isRedeemPending} onPress={submitRedeem} style={[styles.smallActionButton, styles.redeemActionButton, (busy || isRedeemed || isRedeemPending) ? styles.disabledActionButton : null]}>
+          <Text style={styles.smallActionLightText}>{redeemButtonLabel}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -876,7 +885,7 @@ function HistoryCard({ busy, onRedeem, onUpdate, txn }) {
 
 function CustomerCard({ customer }) {
   const spent = sumCustomer(customer, "billAmount");
-  const earned = sumCustomer(customer, "cashback");
+  const earned = sumCustomer(customer, "issuedCashback");
   const visits = customer.cashbackHistory?.length || 0;
 
   return (
@@ -963,27 +972,39 @@ function EmptyState({ title, subtitle }) {
 
 function buildMetrics(customers) {
   const transactions = customers.flatMap(customer =>
-    (customer.cashbackHistory || []).map((history, index) => ({
-      id: history.cashbackId || history.cashbackid || `${customer.userId}-${index}`,
-      customerName: customer.name || "Customer",
-      mobile: customer.mobile,
-      billAmount: Number(history.billAmount) || 0,
-      cashback: Number(history.cashback) || 0,
-      status: history.redeemStatus || (history.redeemcashback ? "APPROVED" : "PENDING"),
-      rawDate: history.date,
-      timeLabel: formatTimeLabel(history.date),
-    }))
+    (customer.cashbackHistory || []).map((history, index) => {
+      const status = history.redeemStatus || (history.redeemcashback ? "APPROVED" : "PENDING");
+      const activityDate = status === "APPROVED" ? (history.redeemedAt || history.date) : history.date;
+      const redeemedAmount = Number(history.redeemedAmount)
+        || (status === "APPROVED" ? Number(history.issuedCashback) || Number(history.pendingRedeemAmount) || Number(history.cashback) || 0 : 0);
+
+      return {
+        id: history.cashbackId || history.cashbackid || `${customer.userId}-${index}`,
+        customerName: customer.name || "Customer",
+        mobile: customer.mobile,
+        billAmount: Number(history.billAmount) || 0,
+        cashback: Number(history.cashback) || 0,
+        issuedCashback: Number(history.issuedCashback) || Number(history.cashback) || redeemedAmount,
+        redeemedAmount,
+        pendingRedeemAmount: Number(history.pendingRedeemAmount) || 0,
+        status,
+        rawDate: activityDate,
+        issuedAt: history.date,
+        redeemedAt: history.redeemedAt,
+        timeLabel: formatTimeLabel(activityDate),
+      };
+    })
   );
 
-  const sortedTransactions = transactions.sort((a, b) => parseMaybeDate(b.rawDate) - parseMaybeDate(a.rawDate));
+  const sortedTransactions = transactions.slice().sort((a, b) => parseMaybeDate(b.rawDate) - parseMaybeDate(a.rawDate));
   const totalRevenue = sortedTransactions.reduce((sum, item) => sum + item.billAmount, 0);
-  const totalCashback = sortedTransactions.reduce((sum, item) => sum + item.cashback, 0);
+  const totalCashback = sortedTransactions.reduce((sum, item) => sum + item.issuedCashback, 0);
   const redeemedCashback = sortedTransactions
     .filter(item => item.status === "APPROVED")
-    .reduce((sum, item) => sum + item.cashback, 0);
+    .reduce((sum, item) => sum + item.redeemedAmount, 0);
   const todayTransactions = sortedTransactions.filter(item => isToday(item.rawDate));
   const todayRevenue = todayTransactions.reduce((sum, item) => sum + item.billAmount, 0);
-  const todayCashback = todayTransactions.reduce((sum, item) => sum + item.cashback, 0);
+  const todayCashback = todayTransactions.reduce((sum, item) => sum + item.issuedCashback, 0);
   const avgBill = sortedTransactions.length ? totalRevenue / sortedTransactions.length : 0;
   const weeklyRevenue = buildWeeklyRevenue(sortedTransactions);
   const topCustomers = customers
@@ -1587,6 +1608,11 @@ const styles = StyleSheet.create({
   },
   redeemActionButton: {
     backgroundColor: "#18733b",
+  },
+  disabledActionButton: {
+    backgroundColor: "#94a3b8",
+    borderColor: "#94a3b8",
+    opacity: 0.75,
   },
   smallActionText: {
     color: "#18733b",

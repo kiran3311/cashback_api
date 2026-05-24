@@ -38,6 +38,14 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!user?.userId) return;
+
+    registerForPushNotifications(user.userId).catch(error => {
+      console.log("[Notifications] Token registration failed:", error.message);
+    });
+  }, [user?.userId]);
+
   const value = useMemo(() => ({
     user,
     isLoading,
@@ -45,9 +53,6 @@ export function AuthProvider({ children }) {
     signIn: async nextUser => {
       await saveAuthUser(nextUser);
       setUser(nextUser);
-      registerForPushNotifications(nextUser?.userId).catch(error => {
-        console.log("[Notifications] Token registration failed:", error.message);
-      });
     },
     signOut: async () => {
       await clearAuthUser();
