@@ -20,6 +20,10 @@ app.get("/api-docs", (req, res) => {
     res.sendFile(path.join(__dirname, "docs", "swagger.html"));
 });
 
+// Local browser test utilities, including the FCM service worker.
+// These must be served over HTTP(S); opening the HTML file directly will not work.
+app.use("/test", express.static(path.join(__dirname, "docs")));
+
 // initialize firebase admin
 //const serviceAccount = require("./serviceAccountKey.json");
 
