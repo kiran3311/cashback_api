@@ -7,7 +7,7 @@ This guide documents the Firebase Cloud Messaging (FCM) APIs and the cashback op
 Local development:
 
 ```text
-http://localhost:5001
+http://72.62.195.21:5001
 ```
 
 Replace the base URL with the deployed API address in production.

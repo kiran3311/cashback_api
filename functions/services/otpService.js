@@ -39,22 +39,32 @@ exports.sendOTP = async mobile => {
     });
 
     try {
-        const response = await axios.post(
-            "https://www.fast2sms.com/dev/bulkV2",
-            {
-                route: "q",
-                message: `Your OTP is ${otp}. Valid for 5 minutes. Do not share with anyone.`,
-                language: "english",
-                flash: 0,
+        const response = await axios.get("https://www.fast2sms.com/dev/bulkV2", {
+            params: {
+                authorization: apiKey,
+                route: "dlt",
+                sender_id: "TKKAPP",           // your registered sender ID
+                message: "223653",             // DLT template ID, not raw text
+                variables_values: otp,         // fills {#var#} in the template
                 numbers: mobile
-            },
-            {
-                headers: {
-                    authorization: apiKey,
-                    "Content-Type": "application/json"
-                }
             }
-        );
+        });
+        // const response = await axios.post(
+        //     "https://www.fast2sms.com/dev/bulkV2",
+        //     {
+        //         route: "dlt",
+        //         message: `Your OTP is ${otp}. Valid for 5 minutes. Do not share with anyone.`,
+        //         language: "english",
+        //         flash: 0,
+        //         numbers: mobile
+        //     },
+        //     {
+        //         headers: {
+        //             authorization: apiKey,
+        //             "Content-Type": "application/json"
+        //         }
+        //     }
+        // );
 
         console.log("[OTP] Fast2SMS response:", response.data);
         logActivity("Fast2SMS response received", {

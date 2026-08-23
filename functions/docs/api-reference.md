@@ -5,7 +5,7 @@
 Local base URL:
 
 ```text
-http://localhost:5001
+http://72.62.195.21:5001
 ```
 
 Send this header for every request with a JSON body:
@@ -14,7 +14,7 @@ Send this header for every request with a JSON body:
 Content-Type: application/json
 ```
 
-No authentication middleware is currently registered. Replace `http://localhost:5001` with the deployed server URL in production.
+No authentication middleware is currently registered. The documented server URL is `http://72.62.195.21:5001`.
 
 ## Endpoint index
 
