@@ -236,6 +236,40 @@
         }
       }
     },
+    "/getNearbyShops": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Get shops near the user's current location with offers",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NearbyShopsRequest"
+              },
+              "example": {
+                "latitude": 19.0765,
+                "longitude": 72.8777,
+                "radiusKm": 10,
+                "limit": 20,
+                "category": "Grocery"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Nearby shops fetched successfully"
+          },
+          "400": {
+            "description": "latitude and longitude are required"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
     "/getCustomerListByShopkeeperId": {
       "post": {
         "tags": ["Shopkeepers"],
@@ -687,14 +721,51 @@
           "mobile": {
             "type": "string"
           },
+          "category": {
+            "type": "string"
+          },
           "address": {
             "type": "string"
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
           },
           "pincode": {
             "type": "string"
           },
           "gst": {
             "type": "string"
+          }
+        }
+      },
+      "NearbyShopsRequest": {
+        "type": "object",
+        "required": ["latitude", "longitude"],
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "radiusKm": {
+            "type": "number",
+            "default": 10
+          },
+          "limit": {
+            "type": "integer",
+            "default": 20
+          },
+          "category": {
+            "type": "string",
+            "example": "Grocery"
           }
         }
       },

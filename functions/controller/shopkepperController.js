@@ -146,7 +146,10 @@ exports.createShop = async (req, res) => {
             shopName,
             ownerName,
             mobile,
+            category,
             address,
+            latitude,
+            longitude,
             pincode,
             gst
         } = req.body;
@@ -176,7 +179,10 @@ exports.createShop = async (req, res) => {
             shopName,
             ownerName,
             mobile,
+            category: category || "",
             address: address || "",
+            latitude: latitude !== undefined && latitude !== "" ? Number(latitude) : null,
+            longitude: longitude !== undefined && longitude !== "" ? Number(longitude) : null,
             pincode: pincode || "",
             gst: gst || "",
             createdAt: new Date()
@@ -236,6 +242,173 @@ exports.getShopsByUserId = async (req, res) => {
         console.error("getShopsByUserId error:", error);
         logControllerError("getShopsByUserId failed", error, req);
         res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
+const toNumber = (value) => {
+    if (value === null || value === undefined || value === "") {
+        return null;
+    }
+
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) ? numberValue : null;
+};
+
+const haversineDistanceKm = (lat1, lon1, lat2, lon2) => {
+    if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) {
+        return null;
+    }
+
+    const toRadians = (degree) => (degree * Math.PI) / 180;
+    const earthRadiusKm = 6371;
+
+    const dLat = toRadians(lat2 - lat1);
+    const dLon = toRadians(lon2 - lon1);
+
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return earthRadiusKm * c;
+};
+
+const getShopOffers = async (shopData, shopId) => {
+    const normalizedOffers = [];
+
+    if (Array.isArray(shopData?.offers)) {
+        normalizedOffers.push(...shopData.offers);
+    } else if (shopData?.offers && typeof shopData.offers === "object") {
+        normalizedOffers.push(shopData.offers);
+    }
+
+    const offerCollections = ["shopOffers", "offers"];
+
+    for (const collectionName of offerCollections) {
+        try {
+            const offerSnap = await db.collection(collectionName)
+                .where("shopId", "==", shopId)
+                .get();
+
+            if (!offerSnap.empty) {
+                offerSnap.forEach(doc => {
+                    const offer = doc.data();
+                    normalizedOffers.push({
+                        offerId: doc.id,
+                        ...offer
+                    });
+                });
+            }
+        } catch (error) {
+            console.log(`Warning: unable to fetch ${collectionName} offers`, error.message);
+        }
+    }
+
+    if (shopData?.shopkeeperId && normalizedOffers.length === 0) {
+        try {
+            const fallbackSnap = await db.collection("offers")
+                .where("shopkeeperId", "==", shopData.shopkeeperId)
+                .get();
+
+            fallbackSnap.forEach(doc => {
+                normalizedOffers.push({
+                    offerId: doc.id,
+                    ...doc.data()
+                });
+            });
+        } catch (error) {
+            console.log("Warning: unable to fetch fallback offers", error.message);
+        }
+    }
+
+    return normalizedOffers;
+};
+
+exports.getNearbyShops = async (req, res) => {
+    try {
+        const {
+            latitude,
+            longitude,
+            radiusKm = 10,
+            limit = 20,
+            category
+        } = req.body;
+
+        const userLatitude = toNumber(latitude);
+        const userLongitude = toNumber(longitude);
+        const maxRadiusKm = toNumber(radiusKm) || 10;
+        const maxLimit = Number(limit) || 20;
+
+        if (userLatitude === null || userLongitude === null) {
+            return res.status(400).json({
+                message: "latitude and longitude are required"
+            });
+        }
+
+        const shopsSnapshot = await db.collection("shops").get();
+
+        if (shopsSnapshot.empty) {
+            return res.status(200).json({
+                message: "No shops found nearby",
+                shops: []
+            });
+        }
+
+        const nearbyShops = [];
+
+        for (const doc of shopsSnapshot.docs) {
+            const shopData = doc.data();
+            const shopLatitude = toNumber(shopData.latitude);
+            const shopLongitude = toNumber(shopData.longitude);
+
+            if (shopLatitude === null || shopLongitude === null) {
+                continue;
+            }
+
+            if (category && String(shopData.category || "").toLowerCase() !== String(category).toLowerCase()) {
+                continue;
+            }
+
+            const distanceKm = haversineDistanceKm(userLatitude, userLongitude, shopLatitude, shopLongitude);
+
+            if (distanceKm === null || distanceKm > maxRadiusKm) {
+                continue;
+            }
+
+            const offers = await getShopOffers(shopData, doc.id);
+
+            nearbyShops.push({
+                shopId: doc.id,
+                shopkeeperId: shopData.shopkeeperId || null,
+                shopName: shopData.shopName || "",
+                ownerName: shopData.ownerName || "",
+                category: shopData.category || "",
+                address: shopData.address || "",
+                mobile: shopData.mobile || "",
+                pincode: shopData.pincode || "",
+                gst: shopData.gst || "",
+                latitude: shopLatitude,
+                longitude: shopLongitude,
+                distanceKm: Number(distanceKm.toFixed(2)),
+                offers
+            });
+        }
+
+        nearbyShops.sort((a, b) => a.distanceKm - b.distanceKm);
+
+        return res.status(200).json({
+            message: "Nearby shops fetched successfully",
+            count: nearbyShops.slice(0, maxLimit).length,
+            shops: nearbyShops.slice(0, maxLimit)
+        });
+    } catch (error) {
+        console.error("getNearbyShops error:", error);
+        logControllerError("getNearbyShops failed", error, req);
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
     }
 };
 
