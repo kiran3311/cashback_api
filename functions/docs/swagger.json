@@ -270,6 +270,89 @@
         }
       }
     },
+    "/createOffer": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Create an offer for a shopkeeper",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OfferRequest"
+              },
+              "example": {
+                "shopkeeperId": "shopkeeper_doc_id",
+                "title": "Weekend Offer",
+                "description": "10% off on grocery items",
+                "category": "Grocery",
+                "discountType": "PERCENT",
+                "discountValue": 10,
+                "minimumPurchase": 500,
+                "validFrom": "2026-10-04T00:00:00.000Z",
+                "validUntil": "2026-10-10T23:59:59.000Z",
+                "isActive": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Offer created"
+          },
+          "400": {
+            "description": "shopkeeperId and title are required"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/getOffersByShopkeeperId": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Get all offers for a shopkeeper",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopkeeperIdRequest"
+              },
+              "example": {
+                "shopkeeperId": "shopkeeper_doc_id"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Offers fetched"
+          },
+          "400": {
+            "description": "shopkeeperId is required"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/getAllOffers": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Get all offers across all shopkeepers",
+        "responses": {
+          "200": {
+            "description": "All offers fetched"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
     "/getCustomerListByShopkeeperId": {
       "post": {
         "tags": ["Shopkeepers"],
@@ -766,6 +849,45 @@
           "category": {
             "type": "string",
             "example": "Grocery"
+          }
+        }
+      },
+      "OfferRequest": {
+        "type": "object",
+        "required": ["shopkeeperId", "title"],
+        "properties": {
+          "shopkeeperId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "discountType": {
+            "type": "string",
+            "enum": ["PERCENT", "FIXED"]
+          },
+          "discountValue": {
+            "type": "number"
+          },
+          "minimumPurchase": {
+            "type": "number"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isActive": {
+            "type": "boolean"
           }
         }
       },

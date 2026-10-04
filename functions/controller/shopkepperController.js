@@ -412,6 +412,135 @@ exports.getNearbyShops = async (req, res) => {
     }
 };
 
+exports.createOffer = async (req, res) => {
+    try {
+        const {
+            shopkeeperId,
+            title,
+            description,
+            category,
+            discountType,
+            discountValue,
+            minimumPurchase,
+            validFrom,
+            validUntil,
+            isActive = true
+        } = req.body;
+
+        if (!shopkeeperId || !title) {
+            return res.status(400).json({
+                message: "shopkeeperId and title are required"
+            });
+        }
+
+        const offerData = {
+            shopkeeperId,
+            title,
+            description: description || "",
+            category: category || "",
+            discountType: discountType || "PERCENT",
+            discountValue: discountValue !== undefined ? Number(discountValue) : 0,
+            minimumPurchase: minimumPurchase !== undefined ? Number(minimumPurchase) : 0,
+            validFrom: validFrom ? new Date(validFrom) : new Date(),
+            validUntil: validUntil ? new Date(validUntil) : null,
+            isActive: Boolean(isActive),
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        const offerRef = await db.collection("offers").add(offerData);
+
+        return res.status(201).json({
+            message: "Offer created successfully",
+            offerId: offerRef.id,
+            offer: {
+                offerId: offerRef.id,
+                shopkeeperId,
+                ...offerData
+            }
+        });
+    } catch (error) {
+        console.error("createOffer error:", error);
+        logControllerError("createOffer failed", error, req);
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
+exports.getOffersByShopkeeperId = async (req, res) => {
+    try {
+        const { shopkeeperId } = req.body;
+
+        if (!shopkeeperId) {
+            return res.status(400).json({
+                message: "shopkeeperId is required"
+            });
+        }
+
+        const offerSnap = await db.collection("offers")
+            .where("shopkeeperId", "==", shopkeeperId)
+            .get();
+
+        const offers = offerSnap.docs
+            .map(doc => ({
+                offerId: doc.id,
+                shopkeeperId: doc.data().shopkeeperId || null,
+                ...doc.data()
+            }))
+            .sort((a, b) => {
+                const aTime = a.createdAt && a.createdAt.toDate ? a.createdAt.toDate().getTime() : 0;
+                const bTime = b.createdAt && b.createdAt.toDate ? b.createdAt.toDate().getTime() : 0;
+                return bTime - aTime;
+            });
+
+        return res.status(200).json({
+            message: "Offers fetched successfully",
+            count: offers.length,
+            offers
+        });
+    } catch (error) {
+        console.error("getOffersByShopkeeperId error:", error);
+        logControllerError("getOffersByShopkeeperId failed", error, req);
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
+exports.getAllOffers = async (req, res) => {
+    try {
+        const offerSnap = await db.collection("offers").get();
+
+        const offers = offerSnap.docs
+            .map(doc => ({
+                offerId: doc.id,
+                shopkeeperId: doc.data().shopkeeperId || null,
+                ...doc.data()
+            }))
+            .sort((a, b) => {
+                const aTime = a.createdAt && a.createdAt.toDate ? a.createdAt.toDate().getTime() : 0;
+                const bTime = b.createdAt && b.createdAt.toDate ? b.createdAt.toDate().getTime() : 0;
+                return bTime - aTime;
+            });
+
+        return res.status(200).json({
+            message: "All offers fetched successfully",
+            count: offers.length,
+            offers
+        });
+    } catch (error) {
+        console.error("getAllOffers error:", error);
+        logControllerError("getAllOffers failed", error, req);
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
 exports.getCustomersByShopkeeper = async (req, res) => {
     try {
         const { shopkeeperId } = req.body;
