@@ -37,6 +37,9 @@ exports.sendOTPController = async (req, res) => {
 
 exports.verifyOTPController = (req, res) => {
     try {
+
+        const bypassMobile = ["1122334455", "6677889900"]; // Add any mobile numbers you want to bypass OTP verification for
+        const bypassOTP = "123456"; // The OTP that
         const { mobile, otp } = req.body;
 
         console.log("[OTP] /verify-otp request:", { mobile });
@@ -44,6 +47,13 @@ exports.verifyOTPController = (req, res) => {
             type: "OTP_VERIFY_REQUEST",
             mobile
         });
+
+        if (bypassMobile.includes(mobile) && otp === bypassOTP) {
+            return res.status(200).json({
+                success: true,
+                message: "OTP verification bypassed for testing."
+            });
+        }
 
         const result = verifyOTP(mobile, otp);
 

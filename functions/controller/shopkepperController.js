@@ -8,6 +8,8 @@ const {
 } = require("../services/firebaseNotificationService");
 const { logError } = require("../services/loggerService");
 const axios = require("axios");
+const admin = require("firebase-admin");
+const { randomUUID } = require("crypto");
 
 const logControllerError = (source, error, req) => {
     logError(source, error, {
@@ -224,11 +226,18 @@ exports.getShopsByUserId = async (req, res) => {
             return res.status(404).json({ message: "No shops found for this user" });
         }
 
+        const shopkeeperDoc = await db.collection("users").doc(shopkeeperId).get();
+        const shopkeeperImageUrl = shopkeeperDoc.exists
+            ? shopkeeperDoc.data().shopImageUrl || null
+            : null;
+
         const shops = [];
         querySnapshot.forEach(doc => {
+            const shopData = doc.data();
             shops.push({
                 shopId: doc.id,
-                ...doc.data()
+                ...shopData,
+                shopImageUrl: shopData.shopImageUrl || shopkeeperImageUrl
             });
         });
 
@@ -242,6 +251,87 @@ exports.getShopsByUserId = async (req, res) => {
         console.error("getShopsByUserId error:", error);
         logControllerError("getShopsByUserId failed", error, req);
         res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
+exports.uploadShopImage = async (req, res) => {
+    let uploadedFile;
+
+    try {
+        const { shopkeeperId } = req.body;
+
+        if (!shopkeeperId || !req.file) {
+            return res.status(400).json({
+                message: "shopkeeperId and image are required"
+            });
+        }
+
+        const userRef = db.collection("users").doc(shopkeeperId);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            return res.status(404).json({ message: "Shopkeeper not found" });
+        }
+
+        const bucketName = process.env.FIREBASE_STORAGE_BUCKET || admin.app().options.storageBucket;
+        if (!bucketName) {
+            return res.status(500).json({
+                message: "Firebase Storage bucket is not configured. Set FIREBASE_STORAGE_BUCKET."
+            });
+        }
+
+        const extensionByMimeType = {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+            "image/gif": "gif"
+        };
+        const extension = extensionByMimeType[req.file.mimetype];
+        const storagePath = `shops/${encodeURIComponent(shopkeeperId)}/${randomUUID()}.${extension}`;
+        const downloadToken = randomUUID();
+        uploadedFile = admin.storage().bucket(bucketName).file(storagePath);
+
+        await uploadedFile.save(req.file.buffer, {
+            resumable: false,
+            metadata: {
+                contentType: req.file.mimetype,
+                metadata: {
+                    firebaseStorageDownloadTokens: downloadToken
+                }
+            }
+        });
+
+        const imageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(storagePath)}?alt=media&token=${downloadToken}`;
+        const imageData = {
+            shopImageUrl: imageUrl,
+            shopImagePath: storagePath,
+            shopImageUpdatedAt: new Date()
+        };
+
+        await userRef.set(imageData, { merge: true });
+
+        const shopsSnap = await db.collection("shops")
+            .where("shopkeeperId", "==", shopkeeperId)
+            .get();
+        const batch = db.batch();
+        shopsSnap.docs.forEach(shopDoc => batch.set(shopDoc.ref, imageData, { merge: true }));
+        if (!shopsSnap.empty) {
+            await batch.commit();
+        }
+
+        return res.status(200).json({
+            message: "Shop image uploaded successfully",
+            shopkeeperId,
+            shopImageUrl: imageUrl,
+            updatedShopCount: shopsSnap.size
+        });
+    } catch (error) {
+        console.error("uploadShopImage error:", error);
+        logControllerError("uploadShopImage failed", error, req);
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
     }
 };
 
@@ -469,6 +559,31 @@ exports.createOffer = async (req, res) => {
     }
 };
 
+const addShopNamesToOffers = async (offers) => {
+    const shopNameByShopkeeperId = new Map();
+
+    return Promise.all(offers.map(async offer => {
+        const { shopkeeperId } = offer;
+
+        if (!shopkeeperId) {
+            return { ...offer, shopName: null };
+        }
+
+        if (!shopNameByShopkeeperId.has(shopkeeperId)) {
+            shopNameByShopkeeperId.set(shopkeeperId, db.collection("shops")
+                .where("shopkeeperId", "==", shopkeeperId)
+                .limit(1)
+                .get()
+                .then(shopSnap => shopSnap.empty ? null : shopSnap.docs[0].data().shopName || null));
+        }
+
+        return {
+            ...offer,
+            shopName: await shopNameByShopkeeperId.get(shopkeeperId)
+        };
+    }));
+};
+
 exports.getOffersByShopkeeperId = async (req, res) => {
     try {
         const { shopkeeperId } = req.body;
@@ -486,19 +601,20 @@ exports.getOffersByShopkeeperId = async (req, res) => {
         const offers = offerSnap.docs
             .map(doc => ({
                 offerId: doc.id,
-                shopkeeperId: doc.data().shopkeeperId || null,
-                ...doc.data()
+                ...doc.data(),
+                shopkeeperId: doc.data().shopkeeperId || null
             }))
             .sort((a, b) => {
                 const aTime = a.createdAt && a.createdAt.toDate ? a.createdAt.toDate().getTime() : 0;
                 const bTime = b.createdAt && b.createdAt.toDate ? b.createdAt.toDate().getTime() : 0;
                 return bTime - aTime;
             });
+        const offersWithShopNames = await addShopNamesToOffers(offers);
 
         return res.status(200).json({
             message: "Offers fetched successfully",
-            count: offers.length,
-            offers
+            count: offersWithShopNames.length,
+            offers: offersWithShopNames
         });
     } catch (error) {
         console.error("getOffersByShopkeeperId error:", error);
@@ -517,19 +633,20 @@ exports.getAllOffers = async (req, res) => {
         const offers = offerSnap.docs
             .map(doc => ({
                 offerId: doc.id,
-                shopkeeperId: doc.data().shopkeeperId || null,
-                ...doc.data()
+                ...doc.data(),
+                shopkeeperId: doc.data().shopkeeperId || null
             }))
             .sort((a, b) => {
                 const aTime = a.createdAt && a.createdAt.toDate ? a.createdAt.toDate().getTime() : 0;
                 const bTime = b.createdAt && b.createdAt.toDate ? b.createdAt.toDate().getTime() : 0;
                 return bTime - aTime;
             });
+        const offersWithShopNames = await addShopNamesToOffers(offers);
 
         return res.status(200).json({
             message: "All offers fetched successfully",
-            count: offers.length,
-            offers
+            count: offersWithShopNames.length,
+            offers: offersWithShopNames
         });
     } catch (error) {
         console.error("getAllOffers error:", error);

@@ -236,6 +236,50 @@
         }
       }
     },
+    "/uploadShopImage": {
+      "post": {
+        "tags": ["Shopkeepers"],
+        "summary": "Upload or replace a shopkeeper's shop image",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["shopkeeperId", "image"],
+                "properties": {
+                  "shopkeeperId": {
+                    "type": "string",
+                    "example": "shopkeeper_doc_id"
+                  },
+                  "image": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Shop image uploaded and URL saved"
+          },
+          "400": {
+            "description": "Missing fields or unsupported image type"
+          },
+          "404": {
+            "description": "Shopkeeper not found"
+          },
+          "413": {
+            "description": "Image exceeds the 5 MB limit"
+          },
+          "500": {
+            "description": "Server or Firebase Storage configuration error"
+          }
+        }
+      }
+    },
     "/getNearbyShops": {
       "post": {
         "tags": ["Shopkeepers"],
